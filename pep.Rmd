@@ -11,25 +11,15 @@ library(tidyverse)
 library(lubridate)
 library(broom)
 library(rbeni)
+do_eval <- FALSE
 ```
 
 ## Explorations
 
-Just one file.
-```{r eval=FALSE}
-df <- read_delim("~/data/pep/PEP725_2020-12/pep725_2020-12_10000000.csv", delim = ";")
-df_site <- read_delim("~/data/pep/PEP725_2020-12/pep725_datasource_2020-12_10000000.csv", delim = ";")
-```
-
-```{r eval=FALSE}
-skimr::skim(df)
-print(df)
-```
-
-## Reproducing Zani
+This is to investigate main points using own analysis and code.
 
 Read all files.
-```{r eval=FALSE}
+```{r eval=do_eval}
 vec_files <- list.files("~/data/pep/PEP725_2020-12/", pattern = "pep725_2020-12_", full.names = TRUE)
 list_df <- map(as.list(vec_files), ~read.delim(., sep = ";"))
 names(list_df) <- vec_files
@@ -50,7 +40,7 @@ Zani et al.:
 BBCH94 is not available in this dataset. Using BCCH205 instead (autumnal colouration >=50%)
 
 This information is given in column `phase_id`.
-```{r eval=FALSE}
+```{r eval=do_eval}
 df_sub <- df %>% 
   filter(phase_id %in% c(10, 11, 13, 95, 205)) %>% 
   mutate(id = paste0("i", 1:n())) %>% 
@@ -62,7 +52,7 @@ df_sub <- df %>%
 ```
 
 Determine unique "sites".
-```{r eval=FALSE}
+```{r eval=do_eval}
 df_sites <- df_sub %>% 
   select(lon, lat, elv) %>% 
   distinct() %>% 
@@ -73,7 +63,7 @@ df_sub <- df_sub %>%
 ```
 
 Determine unique species x "sites".
-```{r eval=FALSE}
+```{r eval=do_eval}
 df_species_sites <- df_sub %>% 
   select(lon, lat, elv, species) %>% 
   distinct() %>% 
@@ -84,7 +74,7 @@ df_sub <- df_sub %>%
 ```
 
 Determine unique species x "sites" x pheno-event.
-```{r eval=FALSE}
+```{r eval=do_eval}
 df_pheno_species_sites <- df_sub %>% 
   select(lon, lat, elv, species, pheno) %>% 
   distinct() %>% 
@@ -98,7 +88,7 @@ df_sub <- df_sub %>%
 ### Cleaning
 
 Remove individual time series with less than 15 years of leaf-out and leaf senescence observations,
-```{r eval=FALSE}
+```{r eval=do_eval}
 n_years <- function(vec){length(unique(vec))}
 df_retain <- df_sub %>% 
   group_by(id_species_site) %>% 
@@ -110,7 +100,7 @@ df_sub <- df_sub %>%
 ```
 
 Remove dates deviating from an individual’s median more than 3 times the median absolute deviation.
-```{r eval=FALSE}
+```{r eval=do_eval}
 medabsdev <- function(vec){abs(vec - median(vec)) / median(abs(vec - median(vec)))}
 
 df_retain <- df_sub %>% 
@@ -123,7 +113,7 @@ df_sub <- df_sub %>%
 ```
 
 Remove time series for which the standard deviation of phenological observations across years was higher than 15 for leaf-out and 20 for leaf senescence.
-```{r eval=FALSE}
+```{r eval=do_eval}
 df_retain <- df_sub %>% 
   group_by(id_pheno_species_site, pheno) %>% 
   summarise(sd = sd(day)) %>% 
@@ -134,18 +124,18 @@ df_sub <- df_sub %>%
 ```
 
 Save intermediate file.
-```{r eval=FALSE}
-write_csv(df_sub, path = "data/df_sub.RData")
+```{r eval=do_eval}
+write_csv(df_sub, path = "data/df_sub.csv")
 ```
 
 ### Analysis
 
 Read if not yet available.
 ```{r}
-df_sub <- read_csv("data/df_sub.RData")
+df_sub <- read_csv("data/df_sub.csv")
 ```
 
-```{r eval=FALSE}
+```{r eval=do_eval}
 ## this creates duplicates - problem!!!
 df_anl <- df_sub %>% 
   select(id_species_site, pheno, day, year) %>% 
@@ -158,13 +148,26 @@ df_anl <- df_sub %>%
   pivot_wider(names_from = "pheno", values_from = "day") %>% 
   filter(!is.na(on) & !is.na(off))
 
-save(df_anl, file = "data/df_anl.RData")
+write_csv(df_anl, path = "data/df_anl.csv")
 ```
+
+**Laura:** For the mixed effects modelling, you may best work with `df_anl` (I think).
+
+Coverage of years in the data.
+```{r}
+df_anl <- read_csv("data/df_anl.csv")
+df_anl %>% 
+  ggplot(aes(year, ..count..)) +
+  geom_histogram() +
+  labs(title = "Number of data points per year", subtitle = "By sites and species, providing both EOS and SOS")
+```
+
 
 ## Interannual
 
 Get correlation between on and off for withing species-sites => interannual temporal variation.
-```{r eval=FALSE}
+```{r eval=do_eval}
+df_anl <- read_csv("data/df_anl.csv")
 get_coef_on <- function(df){df %>% filter(term == "on") %>% pull(estimate)}
 get_p_on <- function(df){df %>% filter(term == "on") %>% pull(p.value)}
 
@@ -187,7 +190,7 @@ save(df_temporal, file = "data/df_temporal.RData")
 ```
 
 Get temporal trends for on and off for each site and species.
-```{r}
+```{r eval=do_eval}
 get_coef_year <- function(df){df %>% filter(term == "year") %>% pull(estimate)}
 get_p_year <- function(df){df %>% filter(term == "year") %>% pull(p.value)}
 
@@ -220,7 +223,8 @@ df_temporal %>%
   geom_histogram() +
   xlim(-2.5, 2.5) +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  geom_vline(xintercept = median(df_temporal$coef_on, na.rm = TRUE), color = "red") +
+  geom_vline(xintercept = median(df_temporal$coef_on, na.rm = TRUE), color = "red", linetype = "dashed") +
+  geom_vline(xintercept = mean(df_temporal$coef_on, na.rm = TRUE), color = "red") +
   labs(title = "Slope of EOS ~ SOS", subtitle = paste(nrow(df_temporal), "sites and species"))
 
 df_temporal %>% 
@@ -229,7 +233,8 @@ df_temporal %>%
   geom_histogram() +
   xlim(-2.5, 2.5) +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  geom_vline(xintercept = median(df_temporal$coef_year_on, na.rm = TRUE), color = "red") +
+  geom_vline(xintercept = median(df_temporal$coef_year_on, na.rm = TRUE), color = "red", linetype = "dashed") +
+  geom_vline(xintercept = mean(df_temporal$coef_year_on, na.rm = TRUE), color = "red") +
   labs(title = "Temporal trend of SOS", subtitle = paste(nrow(df_temporal), "sites and species"))
 
 df_temporal %>% 
@@ -238,7 +243,8 @@ df_temporal %>%
   geom_histogram() +
   xlim(-2.5, 2.5) +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  geom_vline(xintercept = median(df_temporal$coef_year_off, na.rm = TRUE), color = "red") +
+  geom_vline(xintercept = median(df_temporal$coef_year_off, na.rm = TRUE), color = "red", linetype = "dashed") +
+  geom_vline(xintercept = mean(df_temporal$coef_year_off, na.rm = TRUE), color = "red") +
   labs(title = "Temporal trend of EOS", subtitle = paste(nrow(df_temporal), "sites and species"))
 
 out <- df_temporal %>% 
@@ -250,14 +256,17 @@ out$gg +
 
 ## Long-term
 
-Get correlation between on and off for withing species-sites => long-term temporal variation (30 bins).
-```{r eval=FALSE}
-df_temporal_12 <- df_anl %>% 
-  mutate(yearbin = ntile(year, n = 12)) %>% 
-  group_by(id_species_site, yearbin) %>% 
+Get correlation between on and off for withing species-sites => long-term temporal variation (5 bins).
+```{r eval=do_eval}
+df_temporal_longterm <- df_anl %>% 
+  # mutate(yearbin = ntile(year, n = 5)) %>% 
+  mutate(yearbin = cut(year, breaks = 5, labels = FALSE)) %>%
+  # group_by(id_species_site, yearbin) %>% 
+  group_by(id_site, yearbin) %>% 
   summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE)) %>% 
   ungroup() %>% 
-  group_by(id_species_site) %>% 
+  # group_by(id_species_site) %>% 
+  group_by(id_site) %>% 
   nest() %>% 
   mutate(linmod = purrr::map(data, ~lm(off ~ on, data = .))) %>% 
   mutate(summ = purrr::map(linmod, ~summary(.))) %>% 
@@ -269,24 +278,48 @@ df_temporal_12 <- df_anl %>%
          adj_rsq = purrr::map_dbl(summ, "adj.r.squared")) %>% 
   select(-summ)
 
-save(df_temporal_12, file = "data/df_temporal_12.RData")
+save(df_temporal_longterm, file = "data/df_temporal_longterm.RData")
+
+## years in bins overview
+df_anl %>% 
+  # mutate(yearbin = ntile(year, n = 5)) %>% 
+  mutate(yearbin = cut(year, breaks = 5, labels = FALSE)) %>%
+  select(year, yearbin) %>% 
+  ggplot(aes(year, yearbin)) +
+  geom_point()
 ```
 
 ```{r}
-load("data/df_temporal_12.RData")
-df_temporal_12 %>% 
+load("data/df_temporal_longterm.RData")
+df_temporal_longterm %>% 
   # filter(p_value_on < 0.05) %>% 
   ggplot(aes(coef_on, ..density..)) +
   geom_histogram() +
-  xlim(-2.5, 2.5) +
+  xlim(-20,20) +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  geom_vline(xintercept = median(df_temporal$coef_on, na.rm = TRUE), color = "red")
+  geom_vline(xintercept = median(df_temporal_longterm$coef_on, na.rm = TRUE), color = "red", linetype = "dashed") +
+  geom_vline(xintercept = mean(df_temporal_longterm$coef_on, na.rm = TRUE), color = "red")
+```
+
+Dependence of mean slope vs. aggregation time scale (number of year bins).
+```{r}
+source("R/agg_temporal.R")
+
+## warning: this takes forever!
+out_agg <- purrr::map(as.list(c(25, 15, 10, 7, 5, 3, 2)), ~agg_temporal(df_anl, nbins = .))
+
+out_agg %>% 
+  purrr::map(., ~pull(., coef_on)) %>% 
+  purrr::map_dbl(., ~median(., na.rm = TRUE)) %>% 
+  tibble(nbins = c(25, 15, 10, 7, 5, 3, 2), mean_slope = .) %>% 
+  ggplot(aes(nbins, mean_slope)) +
+  geom_point()
 ```
 
 ## Spatial
 
 Get correlation between on and off for withing species-sites => long-term temporal variation (30 bins).
-```{r eval=FALSE}
+```{r eval=do_eval}
 df_spatial <- df_anl %>% 
   group_by(id_site) %>% 
   summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE))
@@ -303,7 +336,7 @@ out_modobs$gg
 ## Spatial by species
 
 Get correlation between on and off for withing species-sites => long-term temporal variation (30 bins).
-```{r eval=FALSE}
+```{r eval=do_eval}
 df_spatial_species <- df_anl %>% 
   left_join(select(df_sub, id_species_site, species), by = c("id_species_site")) %>% 
   group_by(id_site, species) %>% 
@@ -333,7 +366,8 @@ df_spatial_species %>%
   geom_histogram(binwidth = 0.5) +
   xlim(-2.5, 2.5) +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  geom_vline(xintercept = median(df_spatial_species$coef_on, na.rm = TRUE), color = "springgreen3")
+  geom_vline(xintercept = mean(df_spatial_species$coef_on, na.rm = TRUE), color = "springgreen3") +
+  geom_vline(xintercept = median(df_spatial_species$coef_on, na.rm = TRUE), color = "springgreen3", linetype = "dashed")
 ```
 
 ## Summary
@@ -345,7 +379,7 @@ df_temporal %>%
   geom_histogram() +
   xlim(-2.5, 2.5) +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  geom_vline(xintercept = median(df_temporal$coef_on, na.rm = TRUE), color = "red") +
-  geom_vline(xintercept = median(df_spatial_species$coef_on, na.rm = TRUE), color = "springgreen3") +
+  geom_vline(xintercept = mean(df_temporal$coef_on, na.rm = TRUE), color = "red") +
+  geom_vline(xintercept = mean(df_spatial_species$coef_on, na.rm = TRUE), color = "springgreen3") +
   geom_vline(xintercept = out_modobs$df_metrics %>% filter(.metric == "slope") %>% pull(.estimate), color = "royalblue")
 ```
