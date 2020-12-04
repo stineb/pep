@@ -29,7 +29,7 @@ print(df)
 ## Reproducing Zani
 
 Read all files.
-```{r}
+```{r eval=FALSE}
 vec_files <- list.files("~/data/pep/PEP725_2020-12/", pattern = "pep725_2020-12_", full.names = TRUE)
 list_df <- map(as.list(vec_files), ~read.delim(., sep = ";"))
 names(list_df) <- vec_files
@@ -157,6 +157,8 @@ df_anl <- df_sub %>%
   select(id_site, id_species_site, pheno, day, year) %>% 
   pivot_wider(names_from = "pheno", values_from = "day") %>% 
   filter(!is.na(on) & !is.na(off))
+
+save(df_anl, file = "data/df_anl.RData")
 ```
 
 ## Interannual
@@ -184,14 +186,66 @@ df_temporal <- df_anl %>%
 save(df_temporal, file = "data/df_temporal.RData")
 ```
 
+Get temporal trends for on and off for each site and species.
 ```{r}
+get_coef_year <- function(df){df %>% filter(term == "year") %>% pull(estimate)}
+get_p_year <- function(df){df %>% filter(term == "year") %>% pull(p.value)}
+
+df_temporal <- df_temporal %>% 
+  
+  ## SOS
+  mutate(linmod = purrr::map(data, ~lm(on ~ year, data = .))) %>% 
+  mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% 
+  mutate(coef_year_on = purrr::map_dbl(df_coef, ~get_coef_year(.))) %>% 
+  mutate(p_value_year_on = purrr::map_dbl(df_coef, ~get_p_year(.))) %>% 
+  select(-linmod, -df_coef) %>% 
+
+  ## EOS
+  mutate(linmod = purrr::map(data, ~lm(off ~ year, data = .))) %>% 
+  mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% 
+  mutate(coef_year_off = purrr::map_dbl(df_coef, ~get_coef_year(.))) %>% 
+  mutate(p_value_year_off = purrr::map_dbl(df_coef, ~get_p_year(.))) %>% 
+  select(-linmod, -df_coef)
+  
+save(df_temporal, file = "data/df_temporal.RData")
+```
+
+
+```{r}
+load("data/df_temporal.RData")
+
 df_temporal %>% 
   # filter(p_value_on < 0.05) %>% 
   ggplot(aes(coef_on, ..density..)) +
   geom_histogram() +
   xlim(-2.5, 2.5) +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  geom_vline(xintercept = median(df_temporal$coef_on, na.rm = TRUE), color = "red")
+  geom_vline(xintercept = median(df_temporal$coef_on, na.rm = TRUE), color = "red") +
+  labs(title = "Slope of EOS ~ SOS", subtitle = paste(nrow(df_temporal), "sites and species"))
+
+df_temporal %>% 
+  # filter(p_value_on < 0.05) %>% 
+  ggplot(aes(coef_year_on, ..density..)) +
+  geom_histogram() +
+  xlim(-2.5, 2.5) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_vline(xintercept = median(df_temporal$coef_year_on, na.rm = TRUE), color = "red") +
+  labs(title = "Temporal trend of SOS", subtitle = paste(nrow(df_temporal), "sites and species"))
+
+df_temporal %>% 
+  # filter(p_value_on < 0.05) %>% 
+  ggplot(aes(coef_year_off, ..density..)) +
+  geom_histogram() +
+  xlim(-2.5, 2.5) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_vline(xintercept = median(df_temporal$coef_year_off, na.rm = TRUE), color = "red") +
+  labs(title = "Temporal trend of EOS", subtitle = paste(nrow(df_temporal), "sites and species"))
+
+out <- df_temporal %>% 
+  analyse_modobs2("coef_year_on", "coef_year_off")
+
+out$gg +
+  labs(title = "Trend in EOS vs. trend in SOS")
 ```
 
 ## Long-term
@@ -219,6 +273,7 @@ save(df_temporal_12, file = "data/df_temporal_12.RData")
 ```
 
 ```{r}
+load("data/df_temporal_12.RData")
 df_temporal_12 %>% 
   # filter(p_value_on < 0.05) %>% 
   ggplot(aes(coef_on, ..density..)) +
@@ -240,6 +295,7 @@ save(df_spatial, file = "data/df_spatial.RData")
 ```
 
 ```{r}
+load("data/df_spatial.RData")
 out_modobs <- df_spatial %>% analyse_modobs2("on", "off", type = "heat")
 out_modobs$gg
 ```
@@ -270,6 +326,7 @@ save(df_spatial_species, file = "data/df_spatial_species.RData")
 ```
 
 ```{r}
+load("data/df_spatial_species.RData")
 df_spatial_species %>% 
   # filter(p_value_on < 0.05) %>% 
   ggplot(aes(coef_on, ..density..)) +

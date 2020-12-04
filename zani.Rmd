@@ -1,0 +1,17 @@
+---
+title: "Zani et al. explorations"
+author: "Beni Stocker"
+date: "12/4/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(broom)
+library(rbeni)
+```
+
+## Explorations
+
