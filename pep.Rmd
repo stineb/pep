@@ -160,14 +160,14 @@ df_anl <- df_sub %>%
   pivot_wider(names_from = "pheno", values_from = "day") %>% 
   filter(!is.na(on) & !is.na(off))
 
-write_csv(df_anl, path = "data/df_anl.csv")
+write_csv(df_anl, path = "data/df_anl_zani.csv")
 ```
 
 **Laura:** For the mixed effects modelling, you may best work with `df_anl` (I think).
 
 Coverage of years in the data.
 ```{r}
-df_anl <- read_csv("data/df_anl.csv")
+df_anl <- read_csv("data/df_anl_zani.csv")
 df_anl %>% 
   ggplot(aes(year, ..count..)) +
   geom_histogram() +
@@ -184,10 +184,11 @@ get_coef_on <- function(df){df %>% filter(term == "on") %>% pull(estimate)}
 get_p_on <- function(df){df %>% filter(term == "on") %>% pull(p.value)}
 
 df_temporal <- df_anl %>% 
-  # ungroup() %>% 
-  # slice(1:10) %>% 
+
+  ## for each species and site
   group_by(id_species_site) %>% 
   nest() %>% 
+  
   mutate(linmod = purrr::map(data, ~lm(off ~ on, data = .))) %>% 
   mutate(summ = purrr::map(linmod, ~summary(.))) %>% 
   mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% 
@@ -275,12 +276,12 @@ Get correlation between on and off for withing species-sites => long-term tempor
 df_temporal_longterm <- df_anl %>% 
   # mutate(yearbin = ntile(year, n = 5)) %>% 
   mutate(yearbin = cut(year, breaks = 5, labels = FALSE)) %>%
-  # group_by(id_species_site, yearbin) %>% 
-  group_by(id_site, yearbin) %>% 
+  group_by(id_species_site, yearbin) %>%
+  # group_by(id_site, yearbin) %>% 
   summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE)) %>% 
   ungroup() %>% 
-  # group_by(id_species_site) %>% 
-  group_by(id_site) %>% 
+  group_by(id_species_site) %>%
+  # group_by(id_site) %>% 
   nest() %>% 
   mutate(linmod = purrr::map(data, ~lm(off ~ on, data = .))) %>% 
   mutate(summ = purrr::map(linmod, ~summary(.))) %>% 
@@ -477,12 +478,10 @@ Dependence of mean slope vs. aggregation time scale (number of bins). With Incre
 ### Aggregating species
 
 ```{r eval=do_eval}
-bins <- c(15, 10, 7, 6, 5, 4, 3, 2)
+bins <- c(25, 19, 15, 11, 9, 7, 5, 3)
 
 list_temporal_longterm <- list()
 list_median_coef <- list()
-list_gg <- list()
-
 for (ibreaks in bins){
   
   print(paste0("breaks_", ibreaks))
@@ -509,23 +508,27 @@ for (ibreaks in bins){
   
   list_median_coef[[paste0("breaks_", ibreaks)]] <- median(list_temporal_longterm[[paste0("breaks_", ibreaks)]]$coef_on, na.rm = TRUE)
   
+}
+save(list_median_coef, file = "data/list_median_coef.RData")
+save(list_temporal_longterm, file = "data/list_temporal_longterm.RData")
+
+list_gg <- list()
+for (ibreaks in bins){
   list_gg[[paste0("breaks_", ibreaks)]] <- list_temporal_longterm[[paste0("breaks_", ibreaks)]] %>% 
     # filter(p_value_on < 0.05) %>% 
     ggplot(aes(coef_on, ..density..)) +
     geom_histogram() +
-    xlim(-20,20) +
+    xlim(-10,10) +
     geom_vline(xintercept = 0, linetype = "dotted") +
-    geom_vline(xintercept = median(list_temporal_longterm[[paste0("breaks_", ibreaks)]]$coef_on, na.rm = TRUE), color = "red", linetype = "dashed")
+    geom_vline(xintercept = median(list_temporal_longterm[[paste0("breaks_", ibreaks)]]$coef_on, na.rm = TRUE), color = "red", linetype = "dashed") +
     # geom_vline(xintercept = mean(list_temporal_longterm[[paste0("breaks_", ibreaks)]]$coef_on, na.rm = TRUE), color = "red")
-  
+    labs(title = paste("N bins", ibreaks))
 }
 save(list_gg, file = "data/list_gg.RData")
-save(list_median_coef, file = "data/list_median_coef.RData")
-save(list_temporal_longterm, file = "data/list_temporal_longterm.RData")
 ```
 
 ```{r}
-bins <- c(15, 10, 7, 6, 5, 4, 3, 2)
+bins <- c(25, 19, 15, 11, 9, 7, 5, 3)
 
 load("data/list_gg.RData")
 load("data/list_median_coef.RData")
