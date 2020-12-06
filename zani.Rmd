@@ -11,7 +11,131 @@ library(tidyverse)
 library(lubridate)
 library(broom)
 library(rbeni)
+do_eval <- FALSE
 ```
 
-## Explorations
+## Data cleaning
 
+**Code and text explanations adopted (and adjusted for slightly different file formats) from `DataMeta_1_PhenoData_Cleaning.R`.**
+
+Following ref(43), we removed 
+(i) individual time-series with less than 15 years of leaf-out and leaf senescence observations for the same year, 
+(ii) dates deviating from an individual's median more than 3 times the median absolute deviation, 
+(iii) time-series for which the standard deviation of phenological observations across years was higher than 15 for leaf flushing and 20 for leaf senescence. 
+The thresholds differed because the mean absolute deviation for leaf-out time-series (8.8) was lower than that for leaf senescence (10.0). 
+
+Import data. This is done slightly differently here, because we I obtained data separated into multiple files.
+```{r eval=do_eval}
+vec_files <- list.files("~/data/pep/PEP725_2020-12/", pattern = "pep725_2020-12_", full.names = TRUE)
+list_df <- map(as.list(vec_files), ~read.delim(., sep = ";"))
+names(list_df) <- vec_files
+
+df <- list_df %>% 
+  bind_rows(.id = "filnam") %>% 
+  as_tibble() %>%  
+  mutate(date = ymd(date))
+
+save(df, file = "data/df_pep725.RData")
+```
+
+```{r}
+load("data/df_pep725.RData")
+```
+
+
+### Number of observations per species
+
+Eliminate species with less than 3000 observations.
+```{r}
+species_retain <- df %>% 
+  group_by(species) %>% 
+  summarise(n_obs = n()) %>% 
+  filter(n_obs >= 3000) %>% 
+  pull(species)
+
+df_sub <- df %>% 
+  filter(species %in% species_retain)
+```
+
+This reduces original dataset to (fraction):
+```{r}
+nrow(df_sub)/nrow(df)
+```
+
+### Relevant phenological dates
+
+Keep only records on leaf flushing and leaf senescence dates
+From PEP725_BBCH.csv (with definition of the BBCH Code) from the PEP725 Dataset
+Spring phenology codes:
+
+- 10	First leaves seperated (mouse ear)
+- 11	Leaf unfolding (first visible leaf stalk)
+
+Autumn phenology codes
+- 94	Autumnal coloring of leaves (50%)
+- 95	50 % autumnal leaf fall
+
+**There seems to be some disaccordance between the code key above and definitions given on the respective page online [here](http://www.pep725.eu/pep725_phase.php) and the selection indicated in the SI:**
+
+- **Code 94 is not in the dataset. Taking 205 instead ("autumnal colouration >=50%")**
+- **Code 13 described as being used in SI, but not in code.**
+
+```{r}
+df_sub <- df_sub %>% 
+  filter(phase_id %in% c(10, 11, 95, 205)) %>%    # include 13?
+  mutate(phenology = ifelse(phase_id %in% c(10, 11), "leaf.out", ifelse(phase_id %in% c(95, 205), "leaf.off", NA)))
+```
+
+Create timeseries identifier (site x species).
+
+**In the present dataset, site ID is given by** `s_id`.
+
+```{r}
+df_species_sites <- df_sub %>% 
+  select(s_id, species) %>% 
+  distinct() %>% 
+  mutate(timeseries = paste0(s_id, "_", species))  # column corresponds to id_species_site
+
+df_sub <- df_sub %>% 
+  left_join(df_species_sites, by = c("s_id", "species"))
+```
+
+Keep only timeseries with observations for both spring and autumn leaf phenology.
+
+**My tidyverse code doesn't work here because there are duplicates in terms of columns `c(timeseries, phenology, day)`!**
+
+```{r eval=FALSE}
+df_retain <- df_sub %>% 
+  select(timeseries, phenology, day) %>% 
+  pivot_wider(names_from = "phenology", values_from = "day")
+```
+
+Using Zani's code instead.
+```{r}
+pheno_out.df <- df_sub %>% 
+  filter(phenology == "leaf.out")
+pheno_off.df <- df_sub %>% 
+  filter(phenology == "leaf.off")
+
+ts_common <- intersect(pheno_out.df$timeseries, pheno_off.df$timeseries)
+pheno_out.df <- pheno_out.df[pheno_out.df$timeseries %in% ts_common,]
+pheno_off.df <- pheno_off.df[pheno_off.df$timeseries %in% ts_common,]    # XXX here, Zani's code makes pheno_out.df <- ... THIS IS A BUG! CORRECTED HERE. XXX
+```
+
+Save unique site locations in CSV (for other uses).
+```{r}
+df_siteinfo <- df_sub %>% 
+  select(s_id, lon, lat, year) %>% 
+  group_by(s_id) %>% 
+  summarise(year_start = min(year), year_end = max(year), lon = mean(lon), lat = mean(lat), var_lon = var(lon), var_lat = var(lat)) %>% 
+  distinct()
+
+df_siteinfo %>% 
+  write_csv("data/siteinfo_pep.csv")
+```
+
+Apply remaining data cleaning steps, using function with code adopted from Zani's code.
+```{r}
+pheno_clean.df <- clean_zani(pheno_out.df, pheno_off.df, ts_common)
+write.table(pheno_clean.df, "data/DataMeta_2_PhenologyObs_PEP725_CleanData.csv", sep=";", row.names = FALSE)
+```
