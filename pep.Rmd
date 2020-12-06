@@ -11,6 +11,11 @@ library(tidyverse)
 library(lubridate)
 library(broom)
 library(rbeni)
+library(lme4) #lmer
+library(MuMIn) #r.squaredGLMM
+library(lmerTest) #p-values
+library(effects) #plot effects
+library(sjPlot) #plot effects
 do_eval <- FALSE
 ```
 
@@ -29,7 +34,6 @@ df <- list_df %>%
   as_tibble() %>%  
   mutate(date = ymd(date))
 ```
-
 
 ### Interpretation of phenological states
 
@@ -84,7 +88,6 @@ df_sub <- df_sub %>%
   left_join(df_pheno_species_sites, by = c("lon", "lat", "elv", "species", "pheno"))
 ```
 
-
 ### Cleaning
 
 Remove individual time series with less than 15 years of leaf-out and leaf senescence observations,
@@ -125,7 +128,7 @@ df_sub <- df_sub %>%
 
 Save intermediate file.
 ```{r eval=do_eval}
-write_csv(df_sub, path = "data/df_sub.csv")
+write_csv(df_sub, path = "~/data/df_sub.csv")
 ```
 
 ### Analysis
@@ -134,7 +137,7 @@ Read if not yet available.
 
 This is based on my own implementation of the data cleaning:
 ```{r}
-df_sub <- read_csv("data/df_sub.csv")
+df_sub <- read_csv("~/data/df_sub.csv")
 ```
 
 This is based on the Zani et al. implementation (run by `zani.Rmd`):
@@ -146,7 +149,6 @@ df_sub <- data.table::fread("data/DataMeta_2_PhenologyObs_PEP725_CleanData.csv")
   rename(day = DoY, id_site = s_id)
 ```
 
-
 ```{r eval=do_eval}
 ## this creates duplicates - problem!!!
 df_anl <- df_sub %>% 
@@ -155,7 +157,7 @@ df_anl <- df_sub %>%
 
 ## solution, but reduces from 2.6 to 2.2 mio obs.
 df_anl <- df_sub %>% 
-  # distinct(id_pheno_species_site, year, .keep_all = TRUE) %>% 
+  distinct(id_pheno_species_site, year, .keep_all = TRUE) %>% 
   select(id_site, id_species_site, pheno, day, year) %>% 
   pivot_wider(names_from = "pheno", values_from = "day") %>% 
   filter(!is.na(on) & !is.na(off))
@@ -167,13 +169,13 @@ write_csv(df_anl, path = "data/df_anl_zani.csv")
 
 Coverage of years in the data.
 ```{r}
-df_anl <- read_csv("data/df_anl_zani.csv")
+df_anl <- read_csv("~/data/df_anl_zani.csv")
+df_anl <- df_anl %>% mutate(species=stringr::str_split(id_species_site, "_") %>% map_chr(., 2))
 df_anl %>% 
   ggplot(aes(year, ..count..)) +
   geom_histogram() +
   labs(title = "Number of data points per year", subtitle = "By sites and species, providing both EOS and SOS")
 ```
-
 
 ## Interannual
 
@@ -184,11 +186,9 @@ get_coef_on <- function(df){df %>% filter(term == "on") %>% pull(estimate)}
 get_p_on <- function(df){df %>% filter(term == "on") %>% pull(p.value)}
 
 df_temporal <- df_anl %>% 
-
   ## for each species and site
   group_by(id_species_site) %>% 
   nest() %>% 
-  
   mutate(linmod = purrr::map(data, ~lm(off ~ on, data = .))) %>% 
   mutate(summ = purrr::map(linmod, ~summary(.))) %>% 
   mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% 
@@ -199,7 +199,36 @@ df_temporal <- df_anl %>%
          adj_rsq = purrr::map_dbl(summ, "adj.r.squared")) %>% 
   select(-summ)
 
-save(df_temporal, file = "data/df_temporal.RData")
+save(df_temporal, file = "~/data/df_temporal.RData")
+```
+
+Interannual temporal variation with LMMs
+```{r}
+length(unique(df_anl$id_species_site))
+length(unique(df_anl$id_site))
+length(unique(df_anl$species))
+length(unique(df_anl$year))
+
+# Both models are equivalent
+Fit_IAV1 = lmer(off ~ on + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV1)
+r.squaredGLMM(Fit_IAV1)
+plot(allEffects(Fit_IAV1))
+Fit_IAV2 = lmer(off ~ on + (1|id_species_site) + (1|id_site), data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV2)
+r.squaredGLMM(Fit_IAV2)
+plot(allEffects(Fit_IAV2))
+
+# Analysis of residuals
+ResG <- residuals(Fit_IAV1)
+FittedG <- fitted(Fit_IAV1)
+par(mfrow=c(2,2))
+plot(ResG ~ FittedG, xlab="Fitted values", ylab="Residuals", main="Residuals vs. fitted")
+abline(h=0) ## Homocedasticity
+plot(log(df_anl$off) ~ FittedG, xlab="Fitted", ylab="Observed", main = "xyplot")
+abline(0, 1) 
+hist(ResG, main="Histogram of residuals", xlab="Residuals") ## Normality
+boxplot(ResG,ylab = "Residuals")
 ```
 
 Get temporal trends for on and off for each site and species.
@@ -223,10 +252,27 @@ df_temporal <- df_temporal %>%
   mutate(p_value_year_off = purrr::map_dbl(df_coef, ~get_p_year(.))) %>% 
   select(-linmod, -df_coef)
   
-save(df_temporal, file = "data/df_temporal.RData")
+save(df_temporal, file = "~/data/df_temporal.RData")
 ```
 
+Temporal trends for on and off with LMMs
+```{r}
+length(unique(df_anl$id_species_site))
+length(unique(df_anl$id_site))
+length(unique(df_anl$species))
+length(unique(df_anl$year))
 
+Fit_Trend1 = lmer(off ~ year + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_Trend1)
+r.squaredGLMM(Fit_Trend1)
+plot(allEffects(Fit_IAV1))
+Fit_Trend2 = lmer(on ~ year + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_Trend2)
+r.squaredGLMM(Fit_Trend2)
+plot(allEffects(Fit_Trend2))
+```
+
+Plot density of coefs
 ```{r}
 load("data/df_temporal.RData")
 
@@ -293,7 +339,7 @@ df_temporal_longterm <- df_anl %>%
          adj_rsq = purrr::map_dbl(summ, "adj.r.squared")) %>% 
   select(-summ)
 
-save(df_temporal_longterm, file = "data/df_temporal_longterm.RData")
+save(df_temporal_longterm, file = "~/data/df_temporal_longterm.RData")
 
 ## years in bins overview
 df_anl %>% 
@@ -304,6 +350,21 @@ df_anl %>%
   geom_point()
 ```
 
+Long-term linear trends with LMMs
+```{r}
+length(unique(df_anl$id_species_site))
+length(unique(df_anl$id_site))
+length(unique(df_anl$species))
+length(unique(df_anl$year))
+
+Fit_LT = lmer(off ~ scale(on) + scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT) # Removed interaction scale(on):scale(year) because was not significant
+#plot(allEffects(Fit_LT))
+plot_model(Fit_LT, type = "eff", terms = c("on","year[2020,1960,1890]"),title = "",axis.title = c("on","off"),legend.title = "year") + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "bottom") 
+r.squaredGLMM(Fit_LT)
+```
+
+Plot density of coefs
 ```{r}
 load("data/df_temporal_longterm.RData")
 df_temporal_longterm %>% 
@@ -340,6 +401,7 @@ df_temporal_longterm_sitepecies <- df_anl %>%
 save(df_temporal_longterm_sitepecies, file = "data/df_temporal_longterm_sitepecies.RData")
 ```
 
+Plot density of coefs
 ```{r}
 load("data/df_temporal_longterm_sitepecies.RData")
 df_temporal_longterm_sitepecies %>% 
@@ -350,11 +412,9 @@ df_temporal_longterm_sitepecies %>%
   geom_vline(xintercept = median(df_temporal_longterm$coef_on, na.rm = TRUE), color = "red", linetype = "dashed")
 ```
 
-
-
 ## Spatial
 
-Get correlation between on and off for withing species-sites => long-term temporal variation (30 bins).
+Get correlation between on and off for withing species-sites 
 ```{r eval=do_eval}
 df_spatial <- df_anl %>% 
   group_by(id_site) %>% 
@@ -363,21 +423,29 @@ df_spatial <- df_anl %>%
 save(df_spatial, file = "data/df_spatial.RData")
 ```
 
+Plot correlation
 ```{r}
 load("data/df_spatial.RData")
 out_modobs <- df_spatial %>% analyse_modobs2("on", "off", type = "heat")
 out_modobs$gg
 ```
 
+Spatial by site with LMMs
+```{r}
+Fit_bySite = lmer(off ~ on + (1|id_site) , data = df_anl, na.action = "na.exclude")
+summary(Fit_bySite)
+plot(allEffects(Fit_bySite))
+r.squaredGLMM(Fit_bySite)
+```
+
 ## Spatial by species
 
-Get correlation between on and off for withing species-sites => long-term temporal variation (30 bins).
+Get correlation between on and off for withing species-sites 
 ```{r eval=do_eval}
 df_spatial_species <- df_anl %>% 
   left_join(select(df_sub, id_species_site, species), by = c("id_species_site")) %>% 
   group_by(id_site, species) %>% 
   summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE)) %>% 
-  
   ungroup() %>% 
   group_by(species) %>% 
   nest() %>% 
@@ -392,8 +460,23 @@ df_spatial_species <- df_anl %>%
   select(-summ)
 
 save(df_spatial_species, file = "data/df_spatial_species.RData")
+df_spatial_species[[2]]
 ```
 
+Spatial by species with LMMs
+```{r}
+
+df_spatial_sps <- df_anl %>% 
+  group_by(id_site, species) %>% 
+  summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE))
+
+Fit_bySps = lmer(off ~ on + (1|species), data = df_spatial_sps, na.action = "na.exclude")
+summary(Fit_bySps)
+plot(allEffects(Fit_bySps))
+r.squaredGLMM(Fit_bySps)
+```
+
+Plot density of coefs
 ```{r}
 load("data/df_spatial_species.RData")
 df_spatial_species %>% 
@@ -470,7 +553,6 @@ df_iav_nested %>%
   labs(title = "Slope of IAV EOS ~ SOS", subtitle = paste(nrow(df_iav_nested), "sites and species"))
 ```
 
-
 ## Varying number of bins
 
 Dependence of mean slope vs. aggregation time scale (number of bins). With Increasing aggregation (from right to left) reversal from a positive to a negative slope. Median slopes are plotted.
@@ -535,7 +617,6 @@ load("data/list_median_coef.RData")
 load("data/list_temporal_longterm.RData")
 
 # list_gg
-
 vec_slopes <- c(list_median_coef %>% unlist(), out_modobs$results %>% pull(slope))
 tibble(nbins =  c(bins, 1), median_slope = vec_slopes) %>% 
   ggplot(aes(nbins, median_slope)) +
@@ -543,7 +624,6 @@ tibble(nbins =  c(bins, 1), median_slope = vec_slopes) %>%
   geom_hline(yintercept = median(df_temporal$coef_on, na.rm = TRUE), color = "red") +
   geom_hline(yintercept = 0, linetype = "dotted")
 ```
-
 
 ## Summary
 
