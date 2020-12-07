@@ -142,7 +142,7 @@ df_sub <- read_csv("~/data/df_sub.csv")
 
 This is based on the Zani et al. implementation (run by `zani.Rmd`):
 ```{r}
-df_sub <- data.table::fread("data/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>% 
+df_sub <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>% 
   as_tibble() %>% 
   mutate(pheno = ifelse(phenology == "leaf.out", "on", ifelse(phenology == "leaf.off", "off", NA))) %>% 
   mutate(id_species_site = timeseries) %>% 

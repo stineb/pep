@@ -1,0 +1,546 @@
+---
+title: "PEP725 explorations"
+author: "Beni Stocker"
+date: "12/2/2020"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(broom)
+library(rbeni)
+library(lme4) #lmer
+library(MuMIn) #r.squaredGLMM
+library(lmerTest) #p-values
+library(effects) #plot effects
+library(sjPlot) #plot effects
+do_eval <- FALSE
+```
+
+### Analysis
+
+Read the data complemented with drivers, obtained from Constantin Zohner (7.12.2020).
+```{r}
+df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
+  as_tibble() %>% 
+  rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
+         anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
+         species = Species, id_site = PEP_ID, id_species_site = timeseries) %>% 
+  
+  ## use the on-water-stressed version of A
+  mutate(cA_tot = `cA_tot-w`)
+```
+
+Compare this to the dataset created in `pep.Rmd` (`df_anl`).
+```{r}
+df_mine <- read_csv("data/df_anl_zani.csv")
+
+df_tmp <- df %>% 
+  left_join(df_mine, by = c("id_species_site", "year"))
+
+df_tmp %>% analyse_modobs2("on.x", "on.y")
+df_tmp %>% analyse_modobs2("off.x", "off.y")
+```
+
+Unfortunately, the SOS and EOS dates are not entirely identical for the two datasets. This could be due to applying the `distinct()` function somewhere along the process. There should really only be one single SOS and EOS data, resp., for each year, species, and site. Look into this again and find out what is done (and should be done) with duplicates.
+
+```{r}
+df_problem <- df_tmp %>% 
+  filter(on.x != on.y) %>% 
+  select(id_species_site, year, on_theirs = on.x, on_mine = on.y)
+df_problem
+```
+Load the cleaned data frame before transforming into wider format.
+```{r}
+df_long <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>% 
+  as_tibble() %>% 
+  mutate(pheno = ifelse(phenology == "leaf.out", "on", ifelse(phenology == "leaf.off", "off", NA))) %>% 
+  mutate(id_species_site = timeseries) %>% 
+  rename(day_correct = DoY, id_site = s_id) %>% 
+  select(id_species_site, year, pheno, day_correct) %>% 
+  filter(pheno == "on")
+
+df_problem <- df_problem %>% 
+  left_join(df_long, by = c("id_species_site", "year")) %>% 
+  rowwise() %>% 
+  mutate(correct_mine = ifelse(on_mine == day_correct, TRUE, FALSE))
+
+## check if any of my dates are not correct
+any(!df_problem$correct_mine)
+```
+
+Mine is correct!
+
+Select which one to use for further analysis.
+```{r}
+df_anl <- df
+```
+
+
+## Interannual
+
+Get correlation between on and off for withing species-sites => interannual temporal variation.
+```{r eval=do_eval}
+get_coef_cA_tot <- function(df){df %>% filter(term == "cA_tot") %>% pull(estimate)}
+get_p_cA_tot <- function(df){df %>% filter(term == "cA_tot") %>% pull(p.value)}
+get_coef_year <- function(df){df %>% filter(term == "year") %>% pull(estimate)}
+get_p_year <- function(df){df %>% filter(term == "year") %>% pull(p.value)}
+
+df_temporal <- df_anl %>% 
+  
+  ## for each species and site
+  ungroup() %>% 
+  group_by(id_species_site) %>% 
+  nest() %>% 
+  
+  ## EOS ~ Assim
+  mutate(linmod = purrr::map(data, ~lm(off ~ cA_tot, data = .))) %>% 
+  mutate(summ = purrr::map(linmod, ~summary(.))) %>% 
+  mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% 
+  mutate(coef_cA_tot = purrr::map_dbl(df_coef, ~get_coef_cA_tot(.))) %>% 
+  mutate(p_value_cA_tot = purrr::map_dbl(df_coef, ~get_p_cA_tot(.))) %>% 
+  select(-linmod) %>% 
+  mutate(rsq = purrr::map_dbl(summ, "r.squared"),
+         adj_rsq = purrr::map_dbl(summ, "adj.r.squared")) %>% 
+  select(-summ) %>% 
+
+  ## SOS temporal trend
+  mutate(linmod = purrr::map(data, ~lm(on ~ year, data = .))) %>% 
+  mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% 
+  mutate(coef_year_on = purrr::map_dbl(df_coef, ~get_coef_year(.))) %>% 
+  mutate(p_value_year_on = purrr::map_dbl(df_coef, ~get_p_year(.))) %>% 
+  select(-linmod, -df_coef) %>% 
+
+  ## EOS temporal trend
+  mutate(linmod = purrr::map(data, ~lm(off ~ year, data = .))) %>% 
+  mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% 
+  mutate(coef_year_off = purrr::map_dbl(df_coef, ~get_coef_year(.))) %>% 
+  mutate(p_value_year_off = purrr::map_dbl(df_coef, ~get_p_year(.))) %>% 
+  select(-linmod, -df_coef)
+  
+save(df_temporal, file = "~/data/df_interannual_assim.RData")
+```
+
+Plot distribution of slopes
+```{r}
+load("~/data/df_interannual_assim.RData")
+
+df_temporal %>% 
+  ggplot(aes(coef_year_on, ..density..)) +
+  geom_histogram() +
+  xlim(-2.5, 2.5) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_vline(xintercept = median(df_temporal$coef_year_on, na.rm = TRUE), color = "red", linetype = "dashed") +
+  labs(title = "Temporal trend of SOS", subtitle = paste(nrow(df_temporal), "sites and species"))
+
+df_temporal %>% 
+  ggplot(aes(coef_year_off, ..density..)) +
+  geom_histogram() +
+  xlim(-2.5, 2.5) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_vline(xintercept = median(df_temporal$coef_year_off, na.rm = TRUE), color = "red", linetype = "dashed") +
+  labs(title = "Temporal trend of EOS", subtitle = paste(nrow(df_temporal), "sites and species"))
+
+df_temporal %>% 
+  ggplot(aes(coef_cA_tot, ..density..)) +
+  geom_histogram() +
+  xlim(-0.25, 0.25) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_vline(xintercept = median(df_temporal$coef_cA_tot, na.rm = TRUE), color = "red", linetype = "dashed") +
+  labs(title = "Slope of EOS ~ cAtot", subtitle = paste(nrow(df_temporal), "sites and species"))
+
+# out <- df_temporal %>% 
+#   analyse_modobs2("coef_year_on", "coef_year_off")
+# 
+# out$gg +
+#   labs(title = "Trend in EOS vs. trend in SOS")
+```
+
+
+Interannual temporal variation with LMMs
+```{r}
+length(unique(df_anl$id_species_site))
+length(unique(df_anl$id_site))
+length(unique(df_anl$species))
+length(unique(df_anl$year))
+
+# Both models are equivalent
+Fit_IAV1 = lmer(off ~ cA_tot + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV1)
+r.squaredGLMM(Fit_IAV1)
+plot(allEffects(Fit_IAV1))
+
+Fit_IAV2 = lmer(off ~ cA_tot + (1|id_species_site) + (1|id_site), data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV2)
+r.squaredGLMM(Fit_IAV2)
+plot(allEffects(Fit_IAV2))
+
+# Analysis of residuals
+ResG <- residuals(Fit_IAV1)
+FittedG <- fitted(Fit_IAV1)
+par(mfrow=c(2,2))
+plot(ResG ~ FittedG, xlab="Fitted values", ylab="Residuals", main="Residuals vs. fitted")
+abline(h=0) ## Homocedasticity
+plot(log(df_anl$off) ~ FittedG, xlab="Fitted", ylab="Observed", main = "xyplot")
+abline(0, 1) 
+hist(ResG, main="Histogram of residuals", xlab="Residuals") ## Normality
+boxplot(ResG,ylab = "Residuals")
+```
+Weird pattern. Why is this?
+```{r}
+tmp <- df_anl %>% 
+  ungroup() %>% 
+  mutate(res = residuals(Fit_IAV1), fit = fitted(Fit_IAV1)) %>% 
+  filter(fit > 310 & res < -40)
+
+plot_map_simpl() +
+  geom_point(data = tmp, aes(x = lon, y = lat), color = "red") +
+  xlim(-10,30) + ylim(30, 60)
+```
+
+
+```{r}
+df_anl %>% 
+  ungroup() %>% 
+  mutate(res = residuals(Fit_IAV1)) %>% 
+  ggplot(aes(x = year, y = res)) +
+  geom_point() +
+  geom_smooth()
+```
+
+Temporal trends for on and off with LMMs
+```{r}
+length(unique(df_anl$id_species_site))
+length(unique(df_anl$id_site))
+length(unique(df_anl$species))
+length(unique(df_anl$year))
+
+Fit_Trend1 = lmer(off ~ year + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_Trend1)
+r.squaredGLMM(Fit_Trend1)
+plot(allEffects(Fit_Trend1))
+
+Fit_Trend2 = lmer(on ~ year + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_Trend2)
+r.squaredGLMM(Fit_Trend2)
+plot(allEffects(Fit_Trend2))
+
+Fit_Trend3 = lmer(cA_tot ~ year + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_Trend3)
+r.squaredGLMM(Fit_Trend3)
+plot(allEffects(Fit_Trend3))
+```
+
+## Long-term
+
+### By site
+
+Get correlation between on and off for withing species-sites => long-term temporal variation (5 bins).
+```{r eval=do_eval}
+df_temporal_longterm <- df_anl %>% 
+  mutate(yearbin = cut(year, breaks = 5, labels = FALSE)) %>%
+  group_by(id_site, yearbin) %>%
+  summarise(on = mean(on, na.rm = TRUE), cA_tot = mean(cA_tot, na.rm = TRUE), off = mean(off, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  group_by(id_site) %>%
+  nest() %>% 
+  mutate(linmod = purrr::map(data, ~lm(off ~ cA_tot, data = .))) %>% 
+  mutate(summ = purrr::map(linmod, ~summary(.))) %>% 
+  mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% 
+  mutate(coef_cA_tot = purrr::map_dbl(df_coef, ~get_coef_cA_tot(.))) %>% 
+  mutate(p_value_cA_tot = purrr::map_dbl(df_coef, ~get_p_cA_tot(.))) %>% 
+  select(-linmod) %>% 
+  mutate(rsq = purrr::map_dbl(summ, "r.squared"),
+         adj_rsq = purrr::map_dbl(summ, "adj.r.squared")) %>% 
+  select(-summ)
+
+save(df_temporal_longterm, file = "~/data/df_temporal_longterm_assim.RData")
+```
+
+Plot density of coefs
+```{r}
+load("data/df_temporal_longterm_assim.RData")
+
+df_temporal_longterm %>% 
+  ggplot(aes(coef_cA_tot, ..density..)) +
+  geom_histogram() +
+  xlim(-1,1) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_vline(xintercept = median(df_temporal_longterm$coef_cA_tot, na.rm = TRUE), color = "red", linetype = "dashed")
+```
+
+Long-term linear trends with LMMs
+```{r}
+length(unique(df_anl$id_species_site))
+length(unique(df_anl$id_site))
+length(unique(df_anl$species))
+length(unique(df_anl$year))
+
+# xxx check interaction effect here!
+
+Fit_LT = lmer(off ~ scale(cA_tot) + scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT) # Removed interaction scale(on):scale(year) because was not significant
+#plot(allEffects(Fit_LT))
+plot_model(Fit_LT, type = "eff", terms = c("on","year[2020,1960,1890]"),title = "",axis.title = c("on","off"),legend.title = "year") + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "bottom") 
+r.squaredGLMM(Fit_LT)
+plot(allEffects(Fit_LT))
+```
+
+
+
+To separate the component of spatial variation, it's not as straight-forward as for long-term temporal variations (taking 'year' as a fixed effect in a linear mixed effects model). Let's just take the site-average SOS and the annual anomalies from it as two separate predictors, in addition to 'year' for the long-term trend.
+```{r}
+separate_anom <- function(df){
+  df_mean <- df %>% 
+    filter(year %in% 1970:2000) %>% 
+    summarise(mean_on = mean(on, na.rm = TRUE), mean_off = mean(off, na.rm = TRUE), mean_cA_tot = mean(cA_tot, na.rm = TRUE))
+  df %>% 
+    mutate(anom_on = on - df_mean$mean_on, 
+           anom_off = off - df_mean$mean_off,
+           mean_on = df_mean$mean_on, 
+           mean_off = df_mean$mean_off,
+           mean_cA_tot = df_mean$mean_cA_tot,
+           anom_cA_tot = cA_tot - df_mean$mean_cA_tot,
+           )
+}
+df_anl <- df_anl %>% 
+  group_by(id_species_site) %>% 
+  nest() %>% 
+  mutate(data = map(data, ~separate_anom(.))) %>% 
+  unnest(data)
+```
+
+Long-term linear trends, separated into site-specific-mean and anomalies.
+```{r}
+Fit_LT_anom = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
+
+summary(Fit_LT_anom)
+plot(allEffects(Fit_LT_anom))
+
+plot_model(Fit_LT_anom, type = "eff", terms = c("on", "year[2020,1960,1890]"), title = "",axis.title = c("on","off"), legend.title = "year") + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom") 
+
+r.squaredGLMM(Fit_LT_anom)
+```
+
+### By site and species
+
+Get correlation between on and off for withing species-sites => long-term temporal variation (5 bins).
+```{r eval=do_eval}
+df_temporal_longterm_sitepecies <- df_anl %>% 
+  mutate(yearbin = cut(year, breaks = 5, labels = FALSE)) %>%
+  group_by(id_species_site, yearbin) %>%
+  summarise(cA_tot = mean(cA_tot, na.rm = TRUE), off = mean(off, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  group_by(id_species_site) %>%
+  nest() %>% 
+  mutate(linmod = purrr::map(data, ~lm(off ~ cA_tot, data = .))) %>% 
+  mutate(summ = purrr::map(linmod, ~summary(.))) %>% 
+  mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% 
+  mutate(coef_cA_tot = purrr::map_dbl(df_coef, ~get_coef_cA_tot(.))) %>% 
+  mutate(p_value_cA_tot = purrr::map_dbl(df_coef, ~get_p_cA_tot(.))) %>% 
+  select(-linmod) %>% 
+  mutate(rsq = purrr::map_dbl(summ, "r.squared"),
+         adj_rsq = purrr::map_dbl(summ, "adj.r.squared")) %>% 
+  select(-summ)
+
+save(df_temporal_longterm_sitepecies, file = "data/df_temporal_longterm_sitepecies.RData")
+```
+
+Plot density of coefs
+```{r}
+load("data/df_temporal_longterm_sitepecies.RData")
+df_temporal_longterm_sitepecies %>% 
+  ggplot(aes(coef_cA_tot, ..density..)) +
+  geom_histogram() +
+  xlim(-1,1) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_vline(xintercept = median(df_temporal_longterm$coef_cA_tot, na.rm = TRUE), color = "red", linetype = "dashed")
+```
+
+## Spatial
+
+Get correlation between on and off for withing species-sites 
+```{r eval=do_eval}
+df_spatial <- df_anl %>% 
+  group_by(id_site) %>% 
+  summarise(cA_tot = mean(cA_tot, na.rm = TRUE), off = mean(off, na.rm = TRUE))
+
+save(df_spatial, file = "data/df_spatial_assim.RData")
+```
+
+Plot correlation
+```{r}
+load("data/df_spatial_assim.RData")
+out_modobs <- df_spatial %>% analyse_modobs2("cA_tot", "off", type = "heat")
+out_modobs$gg
+```
+
+Spatial by site with LMMs
+```{r}
+Fit_bySite = lmer(off ~ cA_tot + (1|id_site) , data = df_anl, na.action = "na.exclude")
+summary(Fit_bySite)
+plot(allEffects(Fit_bySite))
+r.squaredGLMM(Fit_bySite)
+```
+
+## Spatial by species
+
+Get correlation between on and off for withing species-sites 
+```{r eval=do_eval}
+df_spatial_species <- df_anl %>% 
+  group_by(id_site, species) %>% 
+  summarise(cA_tot = mean(cA_tot, na.rm = TRUE), off = mean(off, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  group_by(species) %>% 
+  nest() %>% 
+  mutate(linmod = purrr::map(data, ~lm(off ~ cA_tot, data = .))) %>% 
+  mutate(summ = purrr::map(linmod, ~summary(.))) %>% 
+  mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% 
+  mutate(coef_cA_tot = purrr::map_dbl(df_coef, ~get_coef_cA_tot(.))) %>% 
+  mutate(p_value_cA_tot = purrr::map_dbl(df_coef, ~get_p_cA_tot(.))) %>% 
+  select(-linmod) %>% 
+  mutate(rsq = purrr::map_dbl(summ, "r.squared"),
+         adj_rsq = purrr::map_dbl(summ, "adj.r.squared")) %>% 
+  select(-summ)
+
+save(df_spatial_species, file = "data/df_spatial_species_assim.RData")
+```
+
+Spatial by species with LMMs
+```{r}
+df_spatial_sps <- df_anl %>% 
+  group_by(id_site, species) %>% 
+  summarise(cA_tot = mean(cA_tot, na.rm = TRUE), off = mean(off, na.rm = TRUE))
+
+Fit_bySps = lmer(off ~ cA_tot + (1|id_site/species), data = df_spatial_sps, na.action = "na.exclude")
+summary(Fit_bySps)
+plot(allEffects(Fit_bySps))
+r.squaredGLMM(Fit_bySps)
+
+fitted(Fit_bySps)
+```
+
+What's up with these sites that have a late season end and low A?
+```{r}
+df_spatial_sps <- df_spatial_sps %>% 
+  ungroup() %>% 
+  mutate(fit = fitted(Fit_bySps))
+
+df_spatial_sps %>% 
+  ggplot() +
+  geom_line(aes(cA_tot, fit, color = species)) +
+  geom_point(aes(cA_tot, off, color = species), alpha = 0.1)
+```
+
+```{r}
+Fit_bySps = lmer(off ~ cA_tot + (1|id_site), data = df_spatial_sps, na.action = "na.exclude")
+summary(Fit_bySps)
+plot(allEffects(Fit_bySps))
+r.squaredGLMM(Fit_bySps)
+
+fitted(Fit_bySps)
+```
+
+
+
+Plot density of coefs
+```{r}
+load("data/df_spatial_species.RData")
+df_spatial_species %>% 
+  ggplot(aes(coef_cA_tot, ..density..)) +
+  geom_histogram(binwidth = 0.5) +
+  xlim(-0.05, 0.05) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_vline(xintercept = median(df_spatial_species$coef_on, na.rm = TRUE), color = "springgreen3")
+```
+
+
+## Varying number of bins
+
+Dependence of mean slope vs. aggregation time scale (number of bins). With Increasing aggregation (from right to left) reversal from a positive to a negative slope. Median slopes are plotted.
+
+### Aggregating species
+
+```{r eval=do_eval}
+bins <- c(25, 19, 15, 11, 9, 7, 5, 3)
+
+list_temporal_longterm <- list()
+list_median_coef <- list()
+for (ibreaks in bins){
+  
+  print(paste0("breaks_", ibreaks))
+
+  list_temporal_longterm[[paste0("breaks_", ibreaks)]] <- df_anl %>%
+    # mutate(yearbin = ntile(year, n = ibreaks)) %>%
+    mutate(yearbin = cut(year, breaks = ibreaks, labels = FALSE)) %>%
+    # group_by(id_species_site, yearbin) %>%   # DOESN'T WORK AS EXPECTED
+    group_by(id_site, yearbin) %>%
+    summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE)) %>%
+    ungroup() %>%
+    # group_by(id_species_site) %>%  # DOESN'T WORK AS EXPECTED
+    group_by(id_site) %>%
+    nest() %>%
+    mutate(linmod = purrr::map(data, ~lm(off ~ on, data = .))) %>%
+    mutate(summ = purrr::map(linmod, ~summary(.))) %>%
+    mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>%
+    mutate(coef_on = purrr::map_dbl(df_coef, ~get_coef_on(.))) %>%
+    mutate(p_value_on = purrr::map_dbl(df_coef, ~get_p_on(.))) %>%
+    select(-linmod) %>%
+    mutate(rsq = purrr::map_dbl(summ, "r.squared"),
+           adj_rsq = purrr::map_dbl(summ, "adj.r.squared")) %>%
+    select(-summ)
+  
+  list_median_coef[[paste0("breaks_", ibreaks)]] <- median(list_temporal_longterm[[paste0("breaks_", ibreaks)]]$coef_on, na.rm = TRUE)
+  
+}
+save(list_median_coef, file = "data/list_median_coef.RData")
+save(list_temporal_longterm, file = "data/list_temporal_longterm.RData")
+
+list_gg <- list()
+for (ibreaks in bins){
+  list_gg[[paste0("breaks_", ibreaks)]] <- list_temporal_longterm[[paste0("breaks_", ibreaks)]] %>% 
+    # filter(p_value_on < 0.05) %>% 
+    ggplot(aes(coef_on, ..density..)) +
+    geom_histogram() +
+    xlim(-10,10) +
+    geom_vline(xintercept = 0, linetype = "dotted") +
+    geom_vline(xintercept = median(list_temporal_longterm[[paste0("breaks_", ibreaks)]]$coef_on, na.rm = TRUE), color = "red", linetype = "dashed") +
+    # geom_vline(xintercept = mean(list_temporal_longterm[[paste0("breaks_", ibreaks)]]$coef_on, na.rm = TRUE), color = "red")
+    labs(title = paste("N bins", ibreaks))
+}
+save(list_gg, file = "data/list_gg.RData")
+```
+
+```{r}
+bins <- c(25, 19, 15, 11, 9, 7, 5, 3)
+
+load("data/list_gg.RData")
+load("data/list_median_coef.RData")
+load("data/list_temporal_longterm.RData")
+
+# list_gg
+vec_slopes <- c(list_median_coef %>% unlist(), out_modobs$results %>% pull(slope))
+tibble(nbins =  c(bins, 1), median_slope = vec_slopes) %>% 
+  ggplot(aes(nbins, median_slope)) +
+  geom_point(size = 2) +
+  geom_hline(yintercept = median(df_temporal$coef_on, na.rm = TRUE), color = "red") +
+  geom_hline(yintercept = 0, linetype = "dotted")
+```
+
+## Summary
+
+```{r}
+df_temporal %>% 
+  ggplot(aes(coef_cA_tot, ..density..)) +
+  geom_histogram() +
+  xlim(-0.25, 0.25) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_vline(xintercept = median(df_temporal$coef_cA_tot, na.rm = TRUE), color = "red") +
+  geom_vline(xintercept = median(df_spatial_species$coef_cA_tot, na.rm = TRUE), color = "springgreen3") +
+  geom_vline(xintercept = out_modobs$df_metrics %>% filter(.metric == "slope") %>% pull(.estimate), color = "royalblue")
+
+```
