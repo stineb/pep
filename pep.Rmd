@@ -152,36 +152,36 @@ df_sub <- data.table::fread("data/DataMeta_2_PhenologyObs_PEP725_CleanData.csv")
 ```{r eval=do_eval}
 ## this creates duplicates - problem!!!
 df_anl <- df_sub %>% 
-  select(id_species_site, pheno, day, year) %>% 
+  select(id_site, id_species_site, species, pheno, day, year) %>% 
   pivot_wider(names_from = "pheno", values_from = "day")
 
-## solution, but reduces from 2.6 to 2.2 mio obs.
-df_anl <- df_sub %>% 
-  distinct(id_pheno_species_site, year, .keep_all = TRUE) %>% 
-  select(id_site, id_species_site, pheno, day, year) %>% 
-  pivot_wider(names_from = "pheno", values_from = "day") %>% 
-  filter(!is.na(on) & !is.na(off))
+# ## solution, but reduces from 2.6 to 2.2 mio obs.
+# df_anl <- df_sub %>% 
+#   distinct(id_pheno_species_site, year, .keep_all = TRUE) %>% 
+#   select(id_site, id_species_site, pheno, day, year) %>% 
+#   pivot_wider(names_from = "pheno", values_from = "day") %>% 
+#   filter(!is.na(on) & !is.na(off))
 
-write_csv(df_anl, path = "data/df_anl_zani.csv")
+# write_csv(df_anl, path = "data/df_anl_zani.csv")
 ```
 
 **Laura:** For the mixed effects modelling, you may best work with `df_anl` (I think).
 
-Coverage of years in the data.
-```{r}
-df_anl <- read_csv("~/data/df_anl_zani.csv")
-df_anl <- df_anl %>% mutate(species=stringr::str_split(id_species_site, "_") %>% map_chr(., 2))
-df_anl %>% 
-  ggplot(aes(year, ..count..)) +
-  geom_histogram() +
-  labs(title = "Number of data points per year", subtitle = "By sites and species, providing both EOS and SOS")
-```
+<!-- Coverage of years in the data. -->
+<!-- ```{r} -->
+<!-- df_anl <- read_csv("~/data/df_anl_zani.csv") -->
+<!-- df_anl <- df_anl %>% mutate(species=stringr::str_split(id_species_site, "_") %>% map_chr(., 2)) -->
+<!-- df_anl %>%  -->
+<!--   ggplot(aes(year, ..count..)) + -->
+<!--   geom_histogram() + -->
+<!--   labs(title = "Number of data points per year", subtitle = "By sites and species, providing both EOS and SOS") -->
+<!-- ``` -->
 
 ## Interannual
 
 Get correlation between on and off for withing species-sites => interannual temporal variation.
 ```{r eval=do_eval}
-df_anl <- read_csv("data/df_anl.csv")
+# df_anl <- read_csv("data/df_anl.csv")
 get_coef_on <- function(df){df %>% filter(term == "on") %>% pull(estimate)}
 get_p_on <- function(df){df %>% filter(term == "on") %>% pull(p.value)}
 
@@ -214,6 +214,7 @@ Fit_IAV1 = lmer(off ~ on + (1|id_site/species) , data = df_anl, na.action = "na.
 summary(Fit_IAV1)
 r.squaredGLMM(Fit_IAV1)
 plot(allEffects(Fit_IAV1))
+
 Fit_IAV2 = lmer(off ~ on + (1|id_species_site) + (1|id_site), data = df_anl, na.action = "na.exclude")
 summary(Fit_IAV2)
 r.squaredGLMM(Fit_IAV2)
@@ -265,7 +266,8 @@ length(unique(df_anl$year))
 Fit_Trend1 = lmer(off ~ year + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
 summary(Fit_Trend1)
 r.squaredGLMM(Fit_Trend1)
-plot(allEffects(Fit_IAV1))
+plot(allEffects(Fit_Trend1))
+
 Fit_Trend2 = lmer(on ~ year + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
 summary(Fit_Trend2)
 r.squaredGLMM(Fit_Trend2)
@@ -362,6 +364,7 @@ summary(Fit_LT) # Removed interaction scale(on):scale(year) because was not sign
 #plot(allEffects(Fit_LT))
 plot_model(Fit_LT, type = "eff", terms = c("on","year[2020,1960,1890]"),title = "",axis.title = c("on","off"),legend.title = "year") + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "bottom") 
 r.squaredGLMM(Fit_LT)
+plot(allEffects(Fit_LT))
 ```
 
 Plot density of coefs
@@ -375,6 +378,36 @@ df_temporal_longterm %>%
   geom_vline(xintercept = 0, linetype = "dotted") +
   geom_vline(xintercept = median(df_temporal_longterm$coef_on, na.rm = TRUE), color = "red", linetype = "dashed")
   # geom_vline(xintercept = mean(df_temporal_longterm$coef_on, na.rm = TRUE), color = "red")
+```
+
+To separate the component of spatial variation, it's not as straight-forward as for long-term temporal variations (taking 'year' as a fixed effect in a linear mixed effects model). Let's just take the site-average SOS and the annual anomalies from it as two separate predictors, in addition to 'year' for the long-term trend.
+```{r}
+separate_anom <- function(df){
+  df_mean <- df %>% 
+    summarise(mean_on = mean(on, na.rm = TRUE), mean_off = mean(off, na.rm = TRUE))
+  df %>% 
+    mutate(anom_on = on - df_mean$mean_on, anom_off = off - df_mean$mean_off,
+           mean_on = df_mean$mean_on, mean_off = df_mean$mean_off)
+}
+df_anl <- df_anl %>% 
+  group_by(id_site) %>% 
+  nest() %>% 
+  mutate(data = map(data, ~separate_anom(.))) %>% 
+  unnest(data)
+```
+
+Long-term linear trends, separated into site-specific-mean and anomalies.
+```{r}
+Fit_LT_anom = lmer(off ~ scale(mean_on) + scale(anom_on) + scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
+
+summary(Fit_LT_anom)
+plot(allEffects(Fit_LT_anom))
+
+plot_model(Fit_LT_anom, type = "eff", terms = c("on", "year[2020,1960,1890]"), title = "",axis.title = c("on","off"), legend.title = "year") + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom") 
+
+r.squaredGLMM(Fit_LT_anom)
 ```
 
 ### By site and species
