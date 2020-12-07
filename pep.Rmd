@@ -226,7 +226,7 @@ FittedG <- fitted(Fit_IAV1)
 par(mfrow=c(2,2))
 plot(ResG ~ FittedG, xlab="Fitted values", ylab="Residuals", main="Residuals vs. fitted")
 abline(h=0) ## Homocedasticity
-plot(log(df_anl$off) ~ FittedG, xlab="Fitted", ylab="Observed", main = "xyplot")
+plot(df_anl$off ~ FittedG, xlab="Fitted", ylab="Observed", main = "xyplot")
 abline(0, 1) 
 hist(ResG, main="Histogram of residuals", xlab="Residuals") ## Normality
 boxplot(ResG,ylab = "Residuals")
@@ -498,6 +498,15 @@ df_spatial_species[[2]]
 
 Spatial by species with LMMs
 ```{r}
+
+df_spatial_sps <- df_anl %>% 
+  group_by(id_site, species) %>% 
+  summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE))
+
+Fit_bySps = lmer(off ~ on + (1|species), data = df_spatial_sps, na.action = "na.exclude")
+summary(Fit_bySps)
+plot(allEffects(Fit_bySps))
+r.squaredGLMM(Fit_bySps)
 
 df_spatial_sps <- df_anl %>% 
   group_by(id_site, species) %>% 
