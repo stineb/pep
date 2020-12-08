@@ -230,6 +230,7 @@ plot(df_anl$off ~ FittedG, xlab="Fitted", ylab="Observed", main = "xyplot")
 abline(0, 1) 
 hist(ResG, main="Histogram of residuals", xlab="Residuals") ## Normality
 boxplot(ResG,ylab = "Residuals")
+
 ```
 
 Get temporal trends for on and off for each site and species.
@@ -322,14 +323,11 @@ out$gg +
 Get correlation between on and off for withing species-sites => long-term temporal variation (5 bins).
 ```{r eval=do_eval}
 df_temporal_longterm <- df_anl %>% 
-  # mutate(yearbin = ntile(year, n = 5)) %>% 
   mutate(yearbin = cut(year, breaks = 5, labels = FALSE)) %>%
-  group_by(id_species_site, yearbin) %>%
-  # group_by(id_site, yearbin) %>% 
+  group_by(id_site, yearbin) %>% 
   summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE)) %>% 
   ungroup() %>% 
-  group_by(id_species_site) %>%
-  # group_by(id_site) %>% 
+  group_by(id_site) %>% 
   nest() %>% 
   mutate(linmod = purrr::map(data, ~lm(off ~ on, data = .))) %>% 
   mutate(summ = purrr::map(linmod, ~summary(.))) %>% 
@@ -359,8 +357,9 @@ length(unique(df_anl$id_site))
 length(unique(df_anl$species))
 length(unique(df_anl$year))
 
-Fit_LT = lmer(off ~ scale(on) + scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
-summary(Fit_LT) # Removed interaction scale(on):scale(year) because was not significant
+# Added interaction scale(on):scale(year) because was significant
+Fit_LT = lmer(off ~ scale(on) * scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT) 
 #plot(allEffects(Fit_LT))
 plot_model(Fit_LT, type = "eff", terms = c("on","year[2020,1960,1890]"),title = "",axis.title = c("on","off"),legend.title = "year") + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "bottom") 
 r.squaredGLMM(Fit_LT)
@@ -399,14 +398,8 @@ df_anl <- df_anl %>%
 Long-term linear trends, separated into site-specific-mean and anomalies.
 ```{r}
 Fit_LT_anom = lmer(off ~ scale(mean_on) + scale(anom_on) + scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
-
 summary(Fit_LT_anom)
 plot(allEffects(Fit_LT_anom))
-
-plot_model(Fit_LT_anom, type = "eff", terms = c("on", "year[2020,1960,1890]"), title = "",axis.title = c("on","off"), legend.title = "year") + 
-  theme_bw() + 
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom") 
-
 r.squaredGLMM(Fit_LT_anom)
 ```
 
@@ -463,12 +456,10 @@ out_modobs <- df_spatial %>% analyse_modobs2("on", "off", type = "heat")
 out_modobs$gg
 ```
 
-Spatial by site with LMMs
+Spatial by site with LM
 ```{r}
-Fit_bySite = lmer(off ~ on + (1|id_site) , data = df_anl, na.action = "na.exclude")
-summary(Fit_bySite)
-plot(allEffects(Fit_bySite))
-r.squaredGLMM(Fit_bySite)
+Fitlm_bySite = lm(off ~ on , data = df_spatial, na.action = "na.exclude")
+summary(Fitlm_bySite)
 ```
 
 ## Spatial by species
@@ -476,7 +467,7 @@ r.squaredGLMM(Fit_bySite)
 Get correlation between on and off for withing species-sites 
 ```{r eval=do_eval}
 df_spatial_species <- df_anl %>% 
-  left_join(select(df_sub, id_species_site, species), by = c("id_species_site")) %>% 
+  #left_join(select(df_sub, id_species_site, species), by = c("id_species_site")) %>% 
   group_by(id_site, species) %>% 
   summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE)) %>% 
   ungroup() %>% 
@@ -503,19 +494,14 @@ df_spatial_sps <- df_anl %>%
   group_by(id_site, species) %>% 
   summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE))
 
-Fit_bySps = lmer(off ~ on + (1|species), data = df_spatial_sps, na.action = "na.exclude")
-summary(Fit_bySps)
-plot(allEffects(Fit_bySps))
-r.squaredGLMM(Fit_bySps)
-
-df_spatial_sps <- df_anl %>% 
-  group_by(id_site, species) %>% 
-  summarise(on = mean(on, na.rm = TRUE), off = mean(off, na.rm = TRUE))
+length(unique(df_spatial_sps$id_site))
+length(unique(df_spatial_sps$species))
 
 Fit_bySps = lmer(off ~ on + (1|species), data = df_spatial_sps, na.action = "na.exclude")
 summary(Fit_bySps)
 plot(allEffects(Fit_bySps))
 r.squaredGLMM(Fit_bySps)
+
 ```
 
 Plot density of coefs

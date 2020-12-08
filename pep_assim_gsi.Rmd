@@ -166,19 +166,19 @@ length(unique(df_anl$species))
 length(unique(df_anl$year))
 
 # Both models are equivalent
-Fit_IAV1 = lmer(off ~ cA_tot + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
-summary(Fit_IAV1)
-r.squaredGLMM(Fit_IAV1)
-plot(allEffects(Fit_IAV1))
+Fit_IAV_cA_tot = lmer(off ~ cA_tot + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV_cA_tot)
+r.squaredGLMM(Fit_IAV_cA_tot)
+plot(allEffects(Fit_IAV_cA_tot))
 
-Fit_IAV2 = lmer(off ~ cA_tot + (1|id_species_site) + (1|id_site), data = df_anl, na.action = "na.exclude")
-summary(Fit_IAV2)
-r.squaredGLMM(Fit_IAV2)
-plot(allEffects(Fit_IAV2))
+Fit_IAV_cGSI = lmer(off ~ cGSI + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV_cGSI)
+r.squaredGLMM(Fit_IAV_cGSI)
+plot(allEffects(Fit_IAV_cGSI))
 
 # Analysis of residuals
-ResG <- residuals(Fit_IAV1)
-FittedG <- fitted(Fit_IAV1)
+ResG <- residuals(Fit_IAV_cGSI)
+FittedG <- fitted(Fit_IAV_cGSI)
 par(mfrow=c(2,2))
 plot(ResG ~ FittedG, xlab="Fitted values", ylab="Residuals", main="Residuals vs. fitted")
 abline(h=0) ## Homocedasticity
@@ -198,7 +198,6 @@ plot_map_simpl() +
   geom_point(data = tmp, aes(x = lon, y = lat), color = "red") +
   xlim(-10,30) + ylim(30, 60)
 ```
-
 
 ```{r}
 df_anl %>% 
@@ -230,6 +229,11 @@ Fit_Trend3 = lmer(cA_tot ~ year + (1|id_site/species) , data = df_anl, na.action
 summary(Fit_Trend3)
 r.squaredGLMM(Fit_Trend3)
 plot(allEffects(Fit_Trend3))
+
+Fit_Trend4 = lmer(cGSI ~ year + (1|id_site/species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_Trend4)
+r.squaredGLMM(Fit_Trend4)
+plot(allEffects(Fit_Trend4))
 ```
 
 ## Long-term
@@ -278,12 +282,17 @@ length(unique(df_anl$species))
 length(unique(df_anl$year))
 
 # Interaction scale(cA_tot):scale(year) is significant and positive.
-Fit_LT = lmer(off ~ scale(cA_tot) * scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
-summary(Fit_LT) 
-#plot(allEffects(Fit_LT))
-plot_model(Fit_LT, type = "eff", terms = c("cA_tot","year[2020,1960,1890]"),title = "",axis.title = c("cA_tot","off"),legend.title = "year") + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "bottom") 
-r.squaredGLMM(Fit_LT)
-plot(allEffects(Fit_LT))
+Fit_LT_cA_tot = lmer(off ~ scale(cA_tot) * scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT_cA_tot) 
+#plot(allEffects(Fit_LT_cA_tot))
+plot_model(Fit_LT_cA_tot, type = "eff", terms = c("cA_tot","year[2020,1960,1890]"),title = "",axis.title = c("cA_tot","off"),legend.title = "year") + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "bottom") 
+r.squaredGLMM(Fit_LT_cA_tot)
+
+Fit_LT_cGSI = lmer(off ~ scale(cGSI) * scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT_cGSI) 
+#plot(allEffects(Fit_LT_cGSI))
+plot_model(Fit_LT_cGSI, type = "eff", terms = c("cGSI","year[2020,1960,1890]"),title = "",axis.title = c("cGSI","off"),legend.title = "year") + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "bottom") 
+r.squaredGLMM(Fit_LT_cGSI)
 ```
 
 To separate the component of spatial variation, it's not as straight-forward as for long-term temporal variations (taking 'year' as a fixed effect in a linear mixed effects model). Let's just take the site-average SOS and the annual anomalies from it as two separate predictors, in addition to 'year' for the long-term trend.
@@ -313,12 +322,8 @@ Long-term linear trends, separated into site-specific-mean and anomalies.
 Fit_LT_anom = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) + (1|id_site/species), data = df_anl, na.action = "na.exclude")
 summary(Fit_LT_anom)
 plot(allEffects(Fit_LT_anom))
-
-plot_model(Fit_LT_anom, type = "eff", terms = c("on", "year[2020,1960,1890]"), title = "",axis.title = c("on","off"), legend.title = "year") + 
-  theme_bw() + 
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom") 
-
 r.squaredGLMM(Fit_LT_anom)
+
 ```
 
 ### By site and species
@@ -376,10 +381,11 @@ out_modobs$gg
 
 Spatial by site with LMMs
 ```{r}
-Fit_bySite = lmer(off ~ cA_tot + (1|id_site) , data = df_anl, na.action = "na.exclude")
-summary(Fit_bySite)
-plot(allEffects(Fit_bySite))
-r.squaredGLMM(Fit_bySite)
+Fit_bySite_cA_tot = lm(off ~ cA_tot, data = df_anl, na.action = "na.exclude")
+summary(Fit_bySite_cA_tot)
+
+Fit_bySite_cGSI = lm(off ~ cGSI, data = df_anl, na.action = "na.exclude")
+summary(Fit_bySite_cGSI)
 ```
 
 ## Spatial by species
@@ -409,14 +415,18 @@ Spatial by species with LMMs
 ```{r}
 df_spatial_sps <- df_anl %>% 
   group_by(id_site, species) %>% 
-  summarise(cA_tot = mean(cA_tot, na.rm = TRUE), off = mean(off, na.rm = TRUE))
+  summarise(cA_tot = mean(cA_tot, na.rm = TRUE), off = mean(off, na.rm = TRUE),cGSI = mean(cGSI, na.rm = TRUE))
 
-Fit_bySps = lmer(off ~ cA_tot + (1|species), data = df_spatial_sps, na.action = "na.exclude")
-summary(Fit_bySps)
-plot(allEffects(Fit_bySps))
-r.squaredGLMM(Fit_bySps)
+Fit_bySps_cA_tot = lmer(off ~ cA_tot + (1|species), data = df_spatial_sps, na.action = "na.exclude")
+summary(Fit_bySps_cA_tot)
+plot(allEffects(Fit_bySps_cA_tot))
+r.squaredGLMM(Fit_bySps_cA_tot)
 
-fitted(Fit_bySps)
+Fit_bySps_cGSI = lmer(off ~ cGSI + (1|species), data = df_spatial_sps, na.action = "na.exclude")
+summary(Fit_bySps_cGSI)
+plot(allEffects(Fit_bySps_cGSI))
+r.squaredGLMM(Fit_bySps_cGSI)
+
 ```
 
 What's up with these sites that have a late season end and low A?
@@ -448,7 +458,7 @@ df_spatial_species %>%
   geom_histogram(binwidth = 0.5) +
   xlim(-0.05, 0.05) +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  geom_vline(xintercept = median(df_spatial_species$coef_on, na.rm = TRUE), color = "springgreen3")
+  geom_vline(xintercept = median(df_spatial_species$coef_cA_tot, na.rm = TRUE), color = "springgreen3")
 ```
 
 ## Varying number of bins
