@@ -256,14 +256,48 @@ df_anl %>%
 
 Identify them using k-means clustering.
 ```{r}
+df_anl <- df_anl %>% 
+  # mutate(cluster = kmeans(select(., off, off_fit), centers = 2)$cluster) %>% 
+  rowwise() %>% 
+  mutate(cluster = ifelse( (abs(off - off_fit) > 43) & off_fit > 300, "bad", "good")) %>% 
+  ungroup()
 
+df_anl %>% 
+  ggplot(aes(x = off_fit, y = off, color = cluster)) +
+  geom_point()
 ```
-
 
 Remove these sites.
 ```{r}
+print(nrow(df_anl))
 df_anl <- df_anl %>% 
-  filter(!(fit > 310 & res < -40))
+  filter(cluster == "good")
+print(nrow(df_anl))
+```
+
+Run LMM for interannual temporal variation again.
+```{r}
+# Both models are equivalent
+Fit_IAV_cA_tot = lmer(off ~ cA_tot + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV_cA_tot)
+r.squaredGLMM(Fit_IAV_cA_tot)
+plot(allEffects(Fit_IAV_cA_tot))
+
+Fit_IAV_cGSI = lmer(off ~ cGSI + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV_cGSI)
+r.squaredGLMM(Fit_IAV_cGSI)
+plot(allEffects(Fit_IAV_cGSI))
+
+# Analysis of residuals
+ResG <- residuals(Fit_IAV_cA_tot)
+FittedG <- fitted(Fit_IAV_cA_tot)
+par(mfrow=c(2,2))
+plot(ResG ~ FittedG, xlab="Fitted values", ylab="Residuals", main="Residuals vs. fitted")
+abline(h=0) ## Homocedasticity
+plot(df_anl$off ~ FittedG, xlab="Fitted", ylab="Observed", main = "xyplot")
+abline(0, 1) 
+hist(ResG, main="Histogram of residuals", xlab="Residuals") ## Normality
+boxplot(ResG,ylab = "Residuals")
 ```
 
 The residuals show a systematic relationship with years. As mixed effects models show, there is a long-term trend (relationship with 'year' as a fixed effect, see below).
@@ -372,7 +406,7 @@ r.squaredGLMM(Fit_LT_cA_tot)
 
 Fit_LT_cGSI = lmer(off ~ scale(cGSI) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
 summary(Fit_LT_cGSI) 
-#plot(allEffects(Fit_LT_cGSI))
+plot(allEffects(Fit_LT_cGSI))
 plot_model(Fit_LT_cGSI, type = "eff", terms = c("cGSI","year[2020,1960,1890]"),title = "",axis.title = c("cGSI","off"),legend.title = "year") + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "bottom") 
 r.squaredGLMM(Fit_LT_cGSI)
 ```
@@ -382,7 +416,10 @@ Let's try to separate annual anomalies and site-level mean (of years 1970-2000).
 separate_anom <- function(df){
   df_mean <- df %>% 
     filter(year %in% 1970:2000) %>% 
-    summarise(mean_on = mean(on, na.rm = TRUE), mean_off = mean(off, na.rm = TRUE), mean_cA_tot = mean(cA_tot, na.rm = TRUE))
+    summarise(mean_on = mean(on, na.rm = TRUE), 
+              mean_off = mean(off, na.rm = TRUE), 
+              mean_cA_tot = mean(cA_tot, na.rm = TRUE),
+              mean_cGSI = mean(cGSI, na.rm = TRUE))
   df %>% 
     mutate(anom_on = on - df_mean$mean_on, 
            anom_off = off - df_mean$mean_off,
@@ -390,6 +427,8 @@ separate_anom <- function(df){
            mean_off = df_mean$mean_off,
            mean_cA_tot = df_mean$mean_cA_tot,
            anom_cA_tot = cA_tot - df_mean$mean_cA_tot,
+           mean_cGSI = df_mean$mean_cGSI,
+           anom_cGSI = cGSI - df_mean$mean_cGSI
            )
 }
 df_anl <- df_anl %>% 
@@ -402,8 +441,13 @@ Fit_LT_anom = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) +
 summary(Fit_LT_anom)
 plot(allEffects(Fit_LT_anom))
 r.squaredGLMM(Fit_LT_anom)
+
+Fit_LT_anom = lmer(off ~ scale(mean_cGSI) + scale(anom_cGSI) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT_anom)
+plot(allEffects(Fit_LT_anom))
+r.squaredGLMM(Fit_LT_anom)
 ```
-Whatever I do, there is always this weird negative relationship between A and EOS at the spatial scale.
+Whatever I do, there is always this weird negative relationship between A and EOS at the spatial (between-site) scale.
 
 
 <!-- ### By site -->
