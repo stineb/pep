@@ -1,0 +1,110 @@
+---
+title: "Spatial sampling of PEP725 data"
+author: "Beni Stocker"
+date: "12/2/2020"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(broom)
+library(rbeni)
+library(lme4) #lmer
+library(MuMIn) #r.squaredGLMM
+library(lmerTest) #p-values
+library(effects) #plot effects
+library(sjPlot) #plot effects
+do_eval <- TRUE
+```
+
+### Analysis
+
+Read the data complemented with drivers, obtained from Constantin Zohner (7.12.2020).
+```{r}
+df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
+  as_tibble() %>% 
+  rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
+         anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
+         species = Species, id_site = PEP_ID, id_species_site = timeseries) %>% 
+  
+  ## use the on-water-stressed version of A
+  mutate(cA_tot = `cA_tot-w`)
+```
+
+Bin the data into 0.5 deg grid points.
+```{r}
+## bin
+dlon <- 0.5
+dlat <- 0.5
+lon_breaks <- seq(from = floor(min(df$lon)), to = ceiling(max(df$lon)), by = dlon)
+lat_breaks <- seq(from = floor(min(df$lat)), to = ceiling(max(df$lat)), by = dlat)
+
+df <- df %>%
+  ungroup() %>% 
+  mutate(ilon = cut(lon, 
+                    breaks = lon_breaks
+                    ),
+         ilat = cut(lat, 
+                    breaks = lat_breaks
+                    )
+         ) %>% 
+  mutate(lon_lower = as.numeric( sub("\\((.+),.*", "\\1", ilon)),
+         lon_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilon) ),
+         lat_lower = as.numeric( sub("\\((.+),.*", "\\1", ilat) ),
+         lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) )
+         ) %>% 
+  mutate(lon_mid = (lon_lower + lon_upper)/2,
+         lat_mid = (lat_lower + lat_upper)/2)
+
+#View(select(df, lon, lat, ilon, ilat, lon_lower, lon_upper, lat_lower, lat_upper, lon_mid, lat_mid))
+
+df <- df %>% 
+  group_by(lon_mid, lat_mid) %>% 
+  drop_na(lon_mid, lat_mid)
+```
+
+The distribution of number of sites per gridcell.
+```{r}
+tmp <- df %>% 
+  select(id_site, lon_mid, lat_mid) %>% 
+  distinct() %>% 
+  group_by(lon_mid, lat_mid) %>% 
+  summarise(n = n())
+
+tmp %>% 
+  ggplot(aes(x = n, y = ..count..)) +
+  geom_histogram() +
+  labs(title = "Number of sites in half-degree gridcells")
+```
+
+Sample one site per gridcell.
+```{r}
+set.seed(1982)
+df_sites_sampled <- df %>% 
+  select(id_site, lon_mid, lat_mid) %>% 
+  distinct() %>% 
+  group_by(lon_mid, lat_mid) %>% 
+  sample_n(1)
+```
+
+Subset original data frame based on this selection.
+```{r}
+df_sampled <- df %>% 
+  filter(id_site %in% df_sites_sampled$id_site)
+```
+
+Quick check: does it still have the negative relationship between A and EOS at the spatial scale?
+```{r}
+df_spatial_sps <- df_sampled %>% 
+  group_by(id_site, species) %>% 
+  summarise(cA_tot = mean(cA_tot, na.rm = TRUE), off = mean(off, na.rm = TRUE), cGSI = mean(cGSI, na.rm = TRUE), on = mean(on, na.rm = TRUE))
+
+Fit_bySps_cA_tot = lmer(off ~ cA_tot + (1|species), data = df_spatial_sps, na.action = "na.exclude")
+summary(Fit_bySps_cA_tot)
+plot(allEffects(Fit_bySps_cA_tot))
+r.squaredGLMM(Fit_bySps_cA_tot)
+```
+Is still there, but only weak.
+
