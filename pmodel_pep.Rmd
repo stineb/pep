@@ -1,0 +1,228 @@
+---
+title: "P-model simulations for PEP725 data"
+author: "Beni Stocker"
+date: "12/2/2020"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(ingestr)
+library(rbeni)
+
+do_eval <- TRUE
+```
+
+### Analysis
+
+Read the data complemented with drivers, obtained from Constantin Zohner (7.12.2020).
+```{r}
+df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
+  as_tibble() %>% 
+  rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
+         anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
+         species = Species, id_site = PEP_ID, id_species_site = timeseries) %>% 
+  
+  ## use the on-water-stressed version of A
+  mutate(cA_tot = `cA_tot-w`)
+```
+
+Bin the data into 0.5 deg grid points.
+```{r}
+## bin
+dlon <- 0.5
+dlat <- 0.5
+lon_breaks <- seq(from = floor(min(df$lon)), to = ceiling(max(df$lon)), by = dlon)
+lat_breaks <- seq(from = floor(min(df$lat)), to = ceiling(max(df$lat)), by = dlat)
+
+df <- df %>%
+  ungroup() %>% 
+  mutate(ilon = cut(lon, 
+                    breaks = lon_breaks
+                    ),
+         ilat = cut(lat, 
+                    breaks = lat_breaks
+                    )
+         ) %>% 
+  mutate(lon_lower = as.numeric( sub("\\((.+),.*", "\\1", ilon)),
+         lon_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilon) ),
+         lat_lower = as.numeric( sub("\\((.+),.*", "\\1", ilat) ),
+         lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) )
+         ) %>% 
+  mutate(lon_mid = (lon_lower + lon_upper)/2,
+         lat_mid = (lat_lower + lat_upper)/2)
+
+#View(select(df, lon, lat, ilon, ilat, lon_lower, lon_upper, lat_lower, lat_upper, lon_mid, lat_mid))
+
+df <- df %>% 
+  group_by(lon_mid, lat_mid) %>% 
+  drop_na(lon_mid, lat_mid)
+```
+
+
+Get all gridcells with at least one site.
+```{r}
+df_sites <- df %>% 
+  ungroup() %>% 
+  dplyr::select(lon = lon_mid, lat = lat_mid) %>% 
+  distinct() %>% 
+  ungroup() %>% 
+  mutate(sitename = paste0("icell_", 1:n())) %>% 
+  mutate(year_start = 1979, year_end = 2018) %>% 
+  mutate(lon_mid = lon, lat_mid = lat) 
+  
+## complement with elevation data
+df <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>% 
+  as_tibble() %>% 
+  dplyr::select(id_site = s_id, alt, alt_dem, lon, lat) %>% 
+  distinct() %>% 
+  mutate(elv = ifelse(is.na(alt), alt_dem, alt)) %>% 
+  dplyr::select(-alt, -alt_dem) %>% 
+  right_join(df, by = c("lon", "lat", "id_site"))
+
+## fill missing elv by mean
+mean_elv <- mean(df$elv, na.rm = TRUE)
+df <- df %>% 
+  rowwise() %>% 
+  mutate(elv = ifelse(is.na(elv), mean_elv, elv)) %>% 
+  ungroup()
+```
+
+Get data.
+```{r eval=do_eval}
+ddf_watch <- ingest(
+  siteinfo = df_sites,
+  source    = "watch_wfdei",
+  getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
+  dir       = "~/data/watch_wfdei/"  # adjust this with your local path
+  )
+save(ddf_watch, file = "data/ddf_watch.RData")
+```
+
+CRU
+```{r eval=do_eval}
+ddf_cru <- ingest(
+  siteinfo = df_sites,
+  source    = "cru",
+  getvars   = "ccov",
+  dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path
+  )
+save(ddf_cru, file = "data/ddf_cru.RData")
+```
+
+Combine the two meteo data frames into one, containing `ccov` (cloud cover) from CRU and all other variables from FLUXNET.
+```{r}
+ddf_meteo <- ddf_watch %>% 
+  tidyr::unnest(data) %>% 
+  left_join(
+    ddf_cru %>% 
+      tidyr::unnest(data),
+    by = c("sitename", "date")
+  ) %>% 
+  group_by(sitename) %>% 
+  tidyr::nest()
+```
+
+CO2
+```{r}
+df_co2 <- read_csv("~/data/co2/cCO2_rcp85_const850-1765.csv")
+```
+
+
+```{r}
+params_siml <- list(
+  spinup             = TRUE,      # to bring soil moisture to steady state
+  spinupyears        = 10,        # number of spinup years. 10 is enough for soil moisture.
+  recycle            = 1,         # number of years recycled during spinup 
+  soilmstress        = FALSE,     # boolean for whether soil moisture stress function is included
+  tempstress         = FALSE,     # boolean for whether temperature stress function is included
+  calc_aet_fapar_vpd = FALSE,     # set to FALSE - should be dropped again
+  in_ppfd            = TRUE,      # if available from forcing files, set to TRUE
+  in_netrad          = FALSE     # if available from forcing files, set to TRUE
+)
+
+params_modl <- list(
+  kphio           = 0.09423773,
+  soilm_par_a     = 0.33349283,
+  soilm_par_b     = 1.45602286
+)
+
+df_soiltexture <- bind_rows(
+  top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
+  bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1)
+)
+  
+  
+## temporary
+df_forcing <- ddf_watch %>% 
+  rename(id_cell = sitename)
+
+tmp <- df %>% 
+  
+  ## nest by site-species (timeseries)
+  group_by(id_species_site, lon_mid, lat_mid) %>% 
+  nest() %>% 
+  
+  ## add id_cell column
+  left_join(df_sites %>% 
+              rename(id_cell = sitename),
+            by = c("lon_mid", "lat_mid")) %>% 
+  
+  ## run p-model
+  mutate(out_pmodel = purrr::map2(data, id_cell, 
+                                  ~run_pmodel_pep(
+                                    .x,
+                                    df_forcing %>% 
+                                      dplyr::filter(id_cell == .y) %>% 
+                                      unnest(data),
+                                    df_co2,
+                                    df_sites %>% 
+                                      dplyr::filter(sitename == .y),
+                                    params_siml, 
+                                    params_modl, 
+                                    df_soiltexture 
+                                  )))
+
+
+
+```
+
+
+
+```{r}
+params_siml <- list(
+  spinup             = TRUE,      # to bring soil moisture to steady state
+  spinupyears        = 10,        # number of spinup years. 10 is enough for soil moisture.
+  recycle            = 1,         # number of years recycled during spinup 
+  soilmstress        = FALSE,     # boolean for whether soil moisture stress function is included
+  tempstress         = FALSE,     # boolean for whether temperature stress function is included
+  calc_aet_fapar_vpd = FALSE,     # set to FALSE - should be dropped again
+  in_ppfd            = TRUE,      # if available from forcing files, set to TRUE
+  in_netrad          = FALSE     # if available from forcing files, set to TRUE
+	)
+
+params_modl <- list(
+	kphio           = 0.09423773,
+	soilm_par_a     = 0.33349283,
+	soilm_par_b     = 1.45602286
+	)
+
+df_soiltexture <- bind_rows(
+  top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
+  bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1)
+)
+
+df_drivers <- collect_drivers_sofun( 
+  siteinfo       = df_sites,
+  params_siml    = params_siml,
+  meteo          = ddf_watch, 
+  fapar          = df_modis_fpar,
+  co2            = df_co2,
+  df_soiltexture = df_soiltexture
+  )
+df_drivers
+```
+
+

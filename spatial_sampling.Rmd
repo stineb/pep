@@ -36,8 +36,8 @@ df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") 
 Bin the data into 0.5 deg grid points.
 ```{r}
 ## bin
-dlon <- 0.5
-dlat <- 0.5
+dlon <- 1
+dlat <- 1
 lon_breaks <- seq(from = floor(min(df$lon)), to = ceiling(max(df$lon)), by = dlon)
 lat_breaks <- seq(from = floor(min(df$lat)), to = ceiling(max(df$lat)), by = dlat)
 
@@ -81,7 +81,7 @@ tmp %>%
 
 Sample one site per gridcell.
 ```{r}
-set.seed(1982)
+set.seed(189)
 df_sites_sampled <- df %>% 
   select(id_site, lon_mid, lat_mid) %>% 
   distinct() %>% 
@@ -105,6 +105,17 @@ Fit_bySps_cA_tot = lmer(off ~ cA_tot + (1|species), data = df_spatial_sps, na.ac
 summary(Fit_bySps_cA_tot)
 plot(allEffects(Fit_bySps_cA_tot))
 r.squaredGLMM(Fit_bySps_cA_tot)
+
+df_spatial_sps %>% 
+  analyse_modobs2("cA_tot", "off")
 ```
 Is still there, but only weak.
 
+```{r}
+plot_map_simpl() +
+  geom_point(
+    data = df_sampled, 
+    aes(x = lon, y = lat), 
+    color = "red") +
+  xlim(-10,30) + ylim(30, 60)
+```
