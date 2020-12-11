@@ -159,7 +159,7 @@ df_soiltexture <- bind_rows(
 df_forcing <- ddf_watch %>% 
   rename(id_cell = sitename)
 
-tmp <- df %>% 
+df_pmodel <- df %>% 
   
   ## nest by site-species (timeseries)
   group_by(id_species_site, lon_mid, lat_mid) %>% 
@@ -183,10 +183,8 @@ tmp <- df %>%
                                     params_siml, 
                                     params_modl, 
                                     df_soiltexture 
-                                  )))
-
-
-
+                                  ))) %>% 
+  dplyr::select(-data)
 ```
 
 

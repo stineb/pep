@@ -35,10 +35,7 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
     dplyr::select(date, temp, vpd, patm, co2, fapar) %>% 
     
     ## remove days in leap years
-    dplyr::filter(!(month(date)==2 & mday(date) == 29)) %>% 
-    
-    ## xxx try
-    mutate(temp = 15, prec = 0.0001, ppfd = 10/(60*60*24), ccov = 0, ndep = 0)
+    dplyr::filter(!(month(date)==2 & mday(date) == 29))
   
   ## forcing must have these:
   # dplyr::select(temp, rainf=prec, vpd, ppfd, netrad, fsun, snowf, co2, ndep, fapar, patm)
@@ -61,6 +58,8 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
     params_modl = params_modl, 
     makecheck = TRUE 
   )
+  
+  return(mod)
   
 }
 
