@@ -33,50 +33,81 @@ df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") 
   mutate(cA_tot = `cA_tot-w`)
 ```
 
-<!-- Compare this to the dataset created in `pep.Rmd` (`df_anl`). -->
-<!-- ```{r} -->
-<!-- df_mine <- read_csv("~/data/df_anl_zani.csv") -->
+Compare this to the dataset created in `pep.Rmd` (`df_anl`).
+```{r}
+df_mine <- read_csv("data/df_anl_zani.csv")
 
-<!-- df_tmp <- df %>% -->
-<!--   left_join(df_mine, by = c("id_species_site", "year")) -->
+df_tmp <- df %>%
+  left_join(df_mine, by = c("id_species_site", "year"))
 
-<!-- df_tmp %>% analyse_modobs2("on.x", "on.y") -->
-<!-- df_tmp %>% analyse_modobs2("off.x", "off.y") -->
-<!-- ``` -->
+df_tmp %>% analyse_modobs2("on.x", "on.y")
+df_tmp %>% analyse_modobs2("off.x", "off.y")
+```
 
-<!-- Unfortunately, the SOS and EOS dates are not entirely identical for the two datasets. This could be due to applying the `distinct()` function somewhere along the process. There should really only be one single SOS and EOS data, resp., for each year, species, and site. Look into this again and find out what is done (and should be done) with duplicates. -->
+Unfortunately, the SOS and EOS dates are not entirely identical for the two datasets. This could be due to applying the `distinct()` function somewhere along the process. There should really only be one single SOS and EOS data, resp., for each year, species, and site. Look into this again and find out what is done (and should be done) with duplicates.
 
-<!-- ```{r} -->
-<!-- df_problem <- df_tmp %>% -->
-<!--   filter(on.x != on.y) %>% -->
-<!--   select(id_species_site, year, on_theirs = on.x, on_mine = on.y) -->
-<!-- df_problem -->
-<!-- ``` -->
+```{r}
+df_problem <- df_tmp %>%
+  filter(on.x != on.y) %>%
+  select(id_species_site, year, on_theirs = on.x, on_mine = on.y)
+df_problem
+```
 
-<!-- Load the cleaned data frame before transforming into wider format. -->
-<!-- ```{r} -->
-<!-- df_long <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>% -->
-<!--   as_tibble() %>% -->
-<!--   mutate(pheno = ifelse(phenology == "leaf.out", "on", ifelse(phenology == "leaf.off", "off", NA))) %>% -->
-<!--   mutate(id_species_site = timeseries) %>% -->
-<!--   rename(day_correct = DoY, id_site = s_id) %>% -->
-<!--   select(id_species_site, year, pheno, day_correct) %>% -->
-<!--   filter(pheno == "on") -->
+Load the cleaned data frame before transforming into wider format.
+```{r}
+df_long <- data.table::fread("data/df_sub.csv") %>%  # "~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv"
+  as_tibble() %>%
+  mutate(pheno = ifelse(phenology == "leaf.out", "on", ifelse(phenology == "leaf.off", "off", NA))) %>%
+  mutate(id_species_site = timeseries) %>%
+  rename(day_correct = DoY, id_site = s_id) %>%
+  select(id_species_site, year, pheno, day_correct) %>%
+  filter(pheno == "on")
 
-<!-- df_problem <- df_problem %>% -->
-<!--   left_join(df_long, by = c("id_species_site", "year")) %>% -->
-<!--   rowwise() %>% -->
-<!--   mutate(correct_mine = ifelse(on_mine == day_correct, TRUE, FALSE)) -->
+df_problem <- df_problem %>%
+  left_join(df_long, by = c("id_species_site", "year")) %>%
+  rowwise() %>%
+  mutate(correct_mine = ifelse(on_mine == day_correct, TRUE, FALSE))
 
-<!-- ## check if any of my dates are not correct -->
-<!-- any(!df_problem$correct_mine) -->
-<!-- ``` -->
+## check if any of my dates are not correct
+any(!df_problem$correct_mine)
+```
 
-<!-- Mine is correct! But I haven't check the implication of this for analyses. -->
+Mine is correct!
 
 Select which one to use for further analysis.
 ```{r}
+## taking uncorrected Zani
 df_anl <- df
+
+## correct Zani: overwrite SOS and EOS with correct one
+df_mine <- read_csv("data/df_anl_zani.csv")
+
+
+
+
+df_correct <- data.table::fread("data/df_sub.csv") %>%  # "~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv"
+  as_tibble()
+
+any(!(df_correct$s_id %>% unique() %in% df$id_site %>% unique()))
+any(!(df$id_site %>% unique() %in% df_correct$s_id %>% unique()))
+
+df_correct <- df_correct %>% 
+  select(id_site = s_id, species, pheno, day, year) %>% 
+  distinct(id_site, species, year, pheno, .keep_all = TRUE) %>% 
+  pivot_wider(names_from = "pheno", values_from = "day") %>% 
+  drop_na(on, off)
+
+df_anl <- df %>% 
+  dplyr::select(-on, -off) %>%
+  left_join(df_mine, by = c("id_site", "species", "year"))
+
+sum(!(df_correct$id_species_site %in% df$id_species_site))
+sum(!(df$id_species_site %in%  df_correct$id_species_site ))
+sum(is.na(df_anl$off))
+sum(is.na(df_anl$on))
+
+df_anl <- df_anl %>% 
+  drop_na(on, off)
 ```
 
 ## Interannual
@@ -125,7 +156,7 @@ save(df_temporal, file = "~/data/df_interannual_assim.RData")
 
 Plot distribution of slopes
 ```{r}
-load("~/data/df_interannual_assim.RData")
+#load("~/data/df_interannual_assim.RData")
 
 df_temporal %>% 
   ggplot(aes(coef_year_on, ..density..)) +
@@ -166,11 +197,6 @@ summary(Fit_IAV_cA_tot)
 r.squaredGLMM(Fit_IAV_cA_tot)
 plot(allEffects(Fit_IAV_cA_tot))
 
-Fit_IAV_cGSI = lmer(off ~ cGSI + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
-summary(Fit_IAV_cGSI)
-r.squaredGLMM(Fit_IAV_cGSI)
-plot(allEffects(Fit_IAV_cGSI))
-
 # Analysis of residuals
 ResG <- residuals(Fit_IAV_cA_tot)
 FittedG <- fitted(Fit_IAV_cA_tot)
@@ -181,6 +207,14 @@ plot(df_anl$off ~ FittedG, xlab="Fitted", ylab="Observed", main = "xyplot")
 abline(0, 1) 
 hist(ResG, main="Histogram of residuals", xlab="Residuals") ## Normality
 boxplot(ResG,ylab = "Residuals")
+```
+
+With growing season index.
+```{r}
+Fit_IAV_cGSI = lmer(off ~ cGSI + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV_cGSI)
+r.squaredGLMM(Fit_IAV_cGSI)
+plot(allEffects(Fit_IAV_cGSI))
 ```
 
 Weird pattern. Why is this?
@@ -254,7 +288,7 @@ df_anl %>%
   analyse_modobs2("off_fit", "off")
 ```
 
-Identify them using k-means clustering.
+Identify them.
 ```{r}
 df_anl <- df_anl %>% 
   # mutate(cluster = kmeans(select(., off, off_fit), centers = 2)$cluster) %>% 
@@ -340,7 +374,7 @@ df_anl <- df_anl %>%
 out <- df_anl %>% 
   analyse_modobs2("cA_tot", "off_norandom", type = "heat")
 out$gg +
-  coord_cartesian(ylim=c(200,350))
+  coord_cartesian(ylim = c(200,350))
 ```
 
 Ok. This shows the same. The point is that any spatial variation is treated as a random effect and effectively removed by this method!
@@ -558,7 +592,7 @@ Whatever I do, there is always this weird negative relationship between A and EO
 
 ## Spatial by species
 
-Aggregate years, to get a "spatial" data frame, distinguishing speies.
+Aggregate years, to get a "spatial" data frame, distinguishing species.
 ```{r}
 df_spatial_sps <- df_anl %>% 
   group_by(id_site, species) %>% 

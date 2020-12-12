@@ -93,15 +93,47 @@ df <- df %>%
 Get data.
 ```{r eval=do_eval}
 ddf_watch <- ingest(
-  siteinfo = df_sites,
+  siteinfo = df_sites %>% slice(1:100),
   source    = "watch_wfdei",
   getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
   dir       = "~/data/watch_wfdei/"  # adjust this with your local path
   )
+save(ddf_watch, file = "data/ddf_watch_1.RData")
+
+ddf_watch <- ingest(
+  siteinfo = df_sites %>% slice(101:200),
+  source    = "watch_wfdei",
+  getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
+  dir       = "~/data/watch_wfdei/"  # adjust this with your local path
+  )
+save(ddf_watch, file = "data/ddf_watch_2.RData")
+
+ddf_watch <- ingest(
+  siteinfo = df_sites %>% slice(201:nrow(.)),
+  source    = "watch_wfdei",
+  getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
+  dir       = "~/data/watch_wfdei/"  # adjust this with your local path
+  )
+save(ddf_watch, file = "data/ddf_watch_3.RData")
+
+## combine to single
+load("data/ddf_watch_1.RData")
+ddf_watch_combined <- ddf_watch
+
+load("data/ddf_watch_2.RData")
+ddf_watch_combined <- ddf_watch_combined %>% 
+  rbind(ddf_watch)
+
+load("data/ddf_watch_3.RData")
+ddf_watch_combined <- ddf_watch_combined %>% 
+  rbind(ddf_watch)
+
+ddf_watch <- ddf_watch_combined
 save(ddf_watch, file = "data/ddf_watch.RData")
 ```
 
 CRU
+
 ```{r eval=do_eval}
 ddf_cru <- ingest(
   siteinfo = df_sites,
