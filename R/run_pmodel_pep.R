@@ -17,22 +17,23 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
     left_join(df_forcing, by = "date") %>% 
     mutate(doy = lubridate::yday(date)) %>% 
     left_join(df_forcing_meandoy %>% 
-                rename(temp_doy = temp, patm_doy = patm, qair_doy = qair, vpd_doy = vpd),
+                rename(temp_doy = temp, patm_doy = patm, qair_doy = qair, vpd_doy = vpd,
+                       ppfd_doy = ppfd, prec_doy = prec, ccov_doy = ccov),
               by = "doy") %>% 
     
     ## fill missing values with mean seasonality
     rowwise() %>% 
     mutate(temp = ifelse(is.na(temp), temp_doy, temp),
-           vpd = ifelse(is.na(vpd), vpd_doy, vpd),
-           patm = ifelse(is.na(patm), patm_doy, patm)
+           vpd  = ifelse(is.na(vpd), vpd_doy, vpd),
+           patm = ifelse(is.na(patm), patm_doy, patm),
+           ppfd = ifelse(is.na(ppfd), ppfd_doy, ppfd),
+           prec = ifelse(is.na(prec), prec_doy, prec),
+           ccov = ifelse(is.na(ccov), ccov_doy, ccov)
     ) %>% 
     
     ## merge co2 data in it
     mutate(year = lubridate::year(date)) %>% 
     left_join(df_co2, by = "year") %>% 
-    
-    ## subset relevant
-    dplyr::select(date, temp, vpd, patm, co2, fapar) %>% 
     
     ## remove days in leap years
     dplyr::filter(!(month(date)==2 & mday(date) == 29))

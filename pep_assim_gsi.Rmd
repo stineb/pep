@@ -48,20 +48,19 @@ Unfortunately, the SOS and EOS dates are not entirely identical for the two data
 
 ```{r}
 df_problem <- df_tmp %>%
-  filter(on.x != on.y) %>%
-  select(id_species_site, year, on_theirs = on.x, on_mine = on.y)
+  dplyr::filter(on.x != on.y) %>%
+  dplyr::select(id_species_site, year, on_theirs = on.x, on_mine = on.y)
 df_problem
 ```
 
 Load the cleaned data frame before transforming into wider format.
 ```{r}
-df_long <- data.table::fread("data/df_sub.csv") %>%  # "~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv"
+df_long <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>%  #  "data/df_sub.csv"
   as_tibble() %>%
   mutate(pheno = ifelse(phenology == "leaf.out", "on", ifelse(phenology == "leaf.off", "off", NA))) %>%
   mutate(id_species_site = timeseries) %>%
   rename(day_correct = DoY, id_site = s_id) %>%
-  select(id_species_site, year, pheno, day_correct) %>%
-  filter(pheno == "on")
+  dplyr::select(id_species_site, year, pheno, day_correct)
 
 df_problem <- df_problem %>%
   left_join(df_long, by = c("id_species_site", "year")) %>%
@@ -75,38 +74,38 @@ any(!df_problem$correct_mine)
 Mine is correct!
 
 Select which one to use for further analysis.
+
+Taking uncorrected Zani
 ```{r}
-## taking uncorrected Zani
 df_anl <- df
-
-## correct Zani: overwrite SOS and EOS with correct one
-df_mine <- read_csv("data/df_anl_zani.csv")
+```
 
 
+Correct Zani data.
+```{r}
+df_wide <- df_long %>% 
+  pivot_wider(names_from = "pheno", values_from = day_correct)
 
+df <- df %>% 
+  rename(on_zani = on, off_zani = off) %>% 
+  left_join(df_wide, by = c("id_species_site", "year"))
 
-df_correct <- data.table::fread("data/df_sub.csv") %>%  # "~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv"
-  as_tibble()
+out <- df %>% analyse_modobs2("on", "on_zani")
+out$gg
+out <- df %>% analyse_modobs2("off", "off_zani")
+out$gg
 
-any(!(df_correct$s_id %>% unique() %in% df$id_site %>% unique()))
-any(!(df$id_site %>% unique() %in% df_correct$s_id %>% unique()))
+## some are actually missing - weird
+sum(is.na(df$off))
 
-df_correct <- df_correct %>% 
-  select(id_site = s_id, species, pheno, day, year) %>% 
-  distinct(id_site, species, year, pheno, .keep_all = TRUE) %>% 
-  pivot_wider(names_from = "pheno", values_from = "day") %>% 
-  drop_na(on, off)
+# ## take zani data for these
+# df_anl <- df %>% 
+#   rowwise() %>% 
+#   mutate(on = ifelse(is.na(on), on_zani, on),
+#          off = ifelse(is.na(off), off_zani, off))
 
+## or just drop them
 df_anl <- df %>% 
-  dplyr::select(-on, -off) %>%
-  left_join(df_mine, by = c("id_site", "species", "year"))
-
-sum(!(df_correct$id_species_site %in% df$id_species_site))
-sum(!(df$id_species_site %in%  df_correct$id_species_site ))
-sum(is.na(df_anl$off))
-sum(is.na(df_anl$on))
-
-df_anl <- df_anl %>% 
   drop_na(on, off)
 ```
 
@@ -614,6 +613,36 @@ plot(allEffects(Fit_bySps_on))
 r.squaredGLMM(Fit_bySps_on)
 ```
 There is still a negative relationship between EOS and A!
+
+How does the relationship look by species? Not treated as a random effect, but done with separate linear regression models.
+```{r}
+list_linmod_cA_tot <- list()
+list_summ_cA_tot <- list()
+list_gg_cA_tot <- list()
+
+list_linmod_cGSI <- list()
+list_summ_cGSI <- list()
+list_gg_cGSI <- list()
+
+for (isp in unique(df_anl$species)){
+  
+  df_sub <- df_spatial_sps %>% 
+    dplyr::filter(species == isp)
+
+  list_linmod_cGSI[[isp]] <- lm(off ~ cGSI, data = df_sub, na.action = "na.exclude")
+  list_summ_cGSI[[isp]] <- summary(list_linmod_cGSI[[isp]])
+  list_gg_cGSI[[isp]] <- df_sub %>% analyse_modobs2("cGSI", "off", type = "heat")
+  
+  list_linmod_cA_tot[[isp]] <- lm(off ~ cA_tot, data = df_sub, na.action = "na.exclude")
+  list_summ_cA_tot[[isp]] <- summary(list_linmod_cA_tot[[isp]])
+  list_gg_cA_tot[[isp]] <- df_sub %>% analyse_modobs2("cA_tot", "off", type = "heat")
+}
+
+purrr::map(list_gg_cA_tot, "gg")
+purrr::map(list_gg_cGSI, "gg")
+```
+
+
 
 How are these drivers distributed in space?
 

@@ -11,6 +11,7 @@ library(tidyverse)
 library(lubridate)
 library(ingestr)
 library(rbeni)
+library(rsofun)
 
 do_eval <- TRUE
 ```
@@ -90,62 +91,65 @@ df <- df %>%
   ungroup()
 ```
 
-Get data.
-```{r eval=do_eval}
-ddf_watch <- ingest(
-  siteinfo = df_sites %>% slice(1:100),
-  source    = "watch_wfdei",
-  getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
-  dir       = "~/data/watch_wfdei/"  # adjust this with your local path
-  )
-save(ddf_watch, file = "data/ddf_watch_1.RData")
+<!-- Get data. -->
+<!-- ```{r eval=do_eval} -->
+<!-- ddf_watch <- ingest( -->
+<!--   siteinfo = df_sites %>% slice(1:100), -->
+<!--   source    = "watch_wfdei", -->
+<!--   getvars   = c("temp", "prec", "ppfd", "vpd", "patm"), -->
+<!--   dir       = "~/data/watch_wfdei/"  # adjust this with your local path -->
+<!--   ) -->
+<!-- save(ddf_watch, file = "data/ddf_watch_1.RData") -->
 
-ddf_watch <- ingest(
-  siteinfo = df_sites %>% slice(101:200),
-  source    = "watch_wfdei",
-  getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
-  dir       = "~/data/watch_wfdei/"  # adjust this with your local path
-  )
-save(ddf_watch, file = "data/ddf_watch_2.RData")
+<!-- ddf_watch <- ingest( -->
+<!--   siteinfo = df_sites %>% slice(101:200), -->
+<!--   source    = "watch_wfdei", -->
+<!--   getvars   = c("temp", "prec", "ppfd", "vpd", "patm"), -->
+<!--   dir       = "~/data/watch_wfdei/"  # adjust this with your local path -->
+<!--   ) -->
+<!-- save(ddf_watch, file = "data/ddf_watch_2.RData") -->
 
-ddf_watch <- ingest(
-  siteinfo = df_sites %>% slice(201:nrow(.)),
-  source    = "watch_wfdei",
-  getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
-  dir       = "~/data/watch_wfdei/"  # adjust this with your local path
-  )
-save(ddf_watch, file = "data/ddf_watch_3.RData")
+<!-- ddf_watch <- ingest( -->
+<!--   siteinfo = df_sites %>% slice(201:nrow(.)), -->
+<!--   source    = "watch_wfdei", -->
+<!--   getvars   = c("temp", "prec", "ppfd", "vpd", "patm"), -->
+<!--   dir       = "~/data/watch_wfdei/"  # adjust this with your local path -->
+<!--   ) -->
+<!-- save(ddf_watch, file = "data/ddf_watch_3.RData") -->
 
-## combine to single
-load("data/ddf_watch_1.RData")
-ddf_watch_combined <- ddf_watch
+<!-- ## combine to single -->
+<!-- load("data/ddf_watch_1.RData") -->
+<!-- ddf_watch_combined <- ddf_watch -->
 
-load("data/ddf_watch_2.RData")
-ddf_watch_combined <- ddf_watch_combined %>% 
-  rbind(ddf_watch)
+<!-- load("data/ddf_watch_2.RData") -->
+<!-- ddf_watch_combined <- ddf_watch_combined %>%  -->
+<!--   rbind(ddf_watch) -->
 
-load("data/ddf_watch_3.RData")
-ddf_watch_combined <- ddf_watch_combined %>% 
-  rbind(ddf_watch)
+<!-- load("data/ddf_watch_3.RData") -->
+<!-- ddf_watch_combined <- ddf_watch_combined %>%  -->
+<!--   rbind(ddf_watch) -->
 
-ddf_watch <- ddf_watch_combined
-save(ddf_watch, file = "data/ddf_watch.RData")
-```
+<!-- ddf_watch <- ddf_watch_combined -->
+<!-- save(ddf_watch, file = "data/ddf_watch.RData") -->
+<!-- ``` -->
 
-CRU
+<!-- CRU -->
 
-```{r eval=do_eval}
-ddf_cru <- ingest(
-  siteinfo = df_sites,
-  source    = "cru",
-  getvars   = "ccov",
-  dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path
-  )
-save(ddf_cru, file = "data/ddf_cru.RData")
-```
+<!-- ```{r eval=do_eval} -->
+<!-- ddf_cru <- ingest( -->
+<!--   siteinfo = df_sites, -->
+<!--   source    = "cru", -->
+<!--   getvars   = "ccov", -->
+<!--   dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path -->
+<!--   ) -->
+<!-- save(ddf_cru, file = "data/ddf_cru.RData") -->
+<!-- ``` -->
 
 Combine the two meteo data frames into one, containing `ccov` (cloud cover) from CRU and all other variables from FLUXNET.
 ```{r}
+load("data/ddf_watch.RData")
+load("data/ddf_cru.RData")
+
 ddf_meteo <- ddf_watch %>% 
   tidyr::unnest(data) %>% 
   left_join(
@@ -185,12 +189,12 @@ df_soiltexture <- bind_rows(
   top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
   bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1)
 )
-  
-  
-## temporary
-df_forcing <- ddf_watch %>% 
-  rename(id_cell = sitename)
 
+## xxx debug
+df_pheno = df_pmodel$data[[1]]
+df_forcing = ddf_meteo %>% dplyr::filter(sitename == "icell_1") %>% unnest(data)
+df_siteinfo = df_sites %>% dplyr::filter(sitename == "icell_1")
+  
 df_pmodel <- df %>% 
   
   ## nest by site-species (timeseries)
@@ -206,8 +210,8 @@ df_pmodel <- df %>%
   mutate(out_pmodel = purrr::map2(data, id_cell, 
                                   ~run_pmodel_pep(
                                     .x,
-                                    df_forcing %>% 
-                                      dplyr::filter(id_cell == .y) %>% 
+                                    ddf_meteo %>% 
+                                      dplyr::filter(sitename == .y) %>% 
                                       unnest(data),
                                     df_co2,
                                     df_sites %>% 
