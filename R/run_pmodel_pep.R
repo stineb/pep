@@ -6,6 +6,7 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
   
   ## get mean seasonality in forcing to be used for all years before 1979
   df_forcing_meandoy <- df_forcing %>% 
+    ungroup() %>% 
     mutate(doy = lubridate::yday(date)) %>% 
     group_by(doy) %>% 
     summarise_if(is.numeric, mean, na.rm = TRUE)
@@ -24,7 +25,7 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
     ## fill missing values with mean seasonality
     rowwise() %>% 
     mutate(temp = ifelse(is.na(temp), temp_doy, temp),
-           vpd  = ifelse(is.na(vpd), vpd_doy, vpd),
+           vpd  = ifelse(is.na(vpd),  vpd_doy,  vpd),
            patm = ifelse(is.na(patm), patm_doy, patm),
            ppfd = ifelse(is.na(ppfd), ppfd_doy, ppfd),
            prec = ifelse(is.na(prec), prec_doy, prec),
@@ -37,9 +38,6 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
     
     ## remove days in leap years
     dplyr::filter(!(month(date)==2 & mday(date) == 29))
-  
-  ## forcing must have these:
-  # dplyr::select(temp, rainf=prec, vpd, ppfd, netrad, fsun, snowf, co2, ndep, fapar, patm)
   
   ## complement
   df_siteinfo$year_start <- min(useyears)
@@ -70,14 +68,14 @@ gen_fapar_tseries <- function(df, useyear){
     out <- init_dates_dataframe(yrstart = useyear, yrend = useyear) %>% 
       mutate(doy = lubridate::yday(date)) %>% 
       rowwise() %>% 
-      mutate(fapar = ifelse(doy >= mean(df$on) & doy < mean(df$off), 1, 0)) %>% 
+      mutate(fapar = ifelse(doy >= mean(df$on) & doy < mean(df$off), 1.0, 0.0)) %>% 
       dplyr::select(-doy) %>% 
       ungroup()
   } else {
     out <- init_dates_dataframe(yrstart = useyear, yrend = useyear) %>% 
       mutate(doy = lubridate::yday(date)) %>% 
       rowwise() %>% 
-      mutate(fapar = ifelse(doy >= ddf$on & doy < ddf$off, 1, 0)) %>% 
+      mutate(fapar = ifelse(doy >= ddf$on & doy < ddf$off, 1.0, 0.0)) %>% 
       dplyr::select(-doy) %>% 
       ungroup()
   }

@@ -169,31 +169,38 @@ df_co2 <- read_csv("~/data/co2/cCO2_rcp85_const850-1765.csv")
 
 ```{r}
 params_siml <- list(
-  spinup             = TRUE,      # to bring soil moisture to steady state
-  spinupyears        = 10,        # number of spinup years. 10 is enough for soil moisture.
-  recycle            = 1,         # number of years recycled during spinup 
-  soilmstress        = FALSE,     # boolean for whether soil moisture stress function is included
-  tempstress         = FALSE,     # boolean for whether temperature stress function is included
-  calc_aet_fapar_vpd = FALSE,     # set to FALSE - should be dropped again
-  in_ppfd            = TRUE,      # if available from forcing files, set to TRUE
-  in_netrad          = FALSE     # if available from forcing files, set to TRUE
-)
+  spinup             = TRUE,
+  spinupyears        = 10,
+  recycle            = 1,
+  soilmstress        = TRUE,
+  tempstress         = TRUE,
+  calc_aet_fapar_vpd = FALSE,
+  in_ppfd            = TRUE,
+  in_netrad          = FALSE,
+  outdt              = 1,
+  ltre               = FALSE,
+  ltne               = FALSE,
+  ltrd               = FALSE,
+  ltnd               = FALSE,
+  lgr3               = TRUE,
+  lgn3               = FALSE,
+  lgr4               = FALSE
+	)
 
+## calibrated parameters for v3.0 (see https://rpubs.com/stineb/rsofun_benchmark_v30)
 params_modl <- list(
-  kphio           = 0.09423773,
-  soilm_par_a     = 0.33349283,
-  soilm_par_b     = 1.45602286
-)
+	kphio           = 0.09423773,
+	soilm_par_a     = 0.33349283,
+	soilm_par_b     = 1.45602286,
+	vpdstress_par_a = 9999,
+	vpdstress_par_b = 9999,
+	vpdstress_par_m = 9999
+	)
 
 df_soiltexture <- bind_rows(
   top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
   bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1)
 )
-
-## xxx debug
-df_pheno = df_pmodel$data[[1]]
-df_forcing = ddf_meteo %>% dplyr::filter(sitename == "icell_1") %>% unnest(data)
-df_siteinfo = df_sites %>% dplyr::filter(sitename == "icell_1")
   
 df_pmodel <- df %>% 
   
@@ -205,6 +212,10 @@ df_pmodel <- df %>%
   left_join(df_sites %>% 
               rename(id_cell = sitename),
             by = c("lon_mid", "lat_mid")) %>% 
+  
+  ## xxx try 1/500
+  ungroup() %>% 
+  slice(1:28) %>% 
   
   ## run p-model
   mutate(out_pmodel = purrr::map2(data, id_cell, 
@@ -221,6 +232,52 @@ df_pmodel <- df %>%
                                     df_soiltexture 
                                   ))) %>% 
   dplyr::select(-data)
+
+save(df_pmodel, file = "data/df_pmodel.RData")
+```
+
+Test
+```{r}
+df_pmodel$out_pmodel[[2]] %>% 
+  dplyr::filter(year(date) %in% 1977:1980) %>% 
+  # slice(1:1000) %>% 
+  ggplot(aes(date, gpp)) + 
+  geom_line()
+
+test <- df_pmodel$out_pmodel[[1]] %>% 
+  mutate(year = lubridate::year(date)) %>% 
+  group_by(year) %>% 
+  summarise_if(is.numeric, max, na.rm = TRUE)
+
+plot(test$gpp, type = "l")
+```
+
+Weirdly low gpp values!
+```{r}
+## xxx debug
+df_pheno = df_pmodel$data[[1]]
+df_forcing = ddf_meteo %>% dplyr::filter(sitename == "icell_1") %>% unnest(data)
+df_siteinfo = df_sites %>% dplyr::filter(sitename == "icell_1")
+
+## compare to fluxnet data from germany
+load("~/data/rsofun_benchmarking/df_drivers_fluxnet2015.Rdata")
+tmp <- df_drivers_fluxnet2015 %>% 
+  dplyr::filter(str_detect(sitename, "DE")) %>% 
+  dplyr::select(forcing) %>% 
+  unnest(forcing) %>% 
+  mutate(prec = prec / (60*60*24), ppfd = ppfd / (60*60*24))
+
+ggplot() +
+  geom_histogram(data = tmp, aes(x = prec, y = ..density..), alpha = 0.5) +
+  geom_histogram(data = df_forcing, aes(x = prec, y = ..density..), alpha = 0.5, fill = "red") + 
+  xlim(-0.0001, 0.0005)
+
+ggplot() +
+  geom_histogram(data = tmp, aes(x = ppfd, y = ..density..), alpha = 0.5) +
+  geom_histogram(data = df_forcing, aes(x = ppfd, y = ..density..), alpha = 0.5, fill = "red")
+
+skim(tmp)
+skim(df_forcing)
 ```
 
 
