@@ -144,3 +144,4 @@ if (ncores > 1){
 
 }
 
+save(df_pmodel, file = "data/df_pmodel.RData")
