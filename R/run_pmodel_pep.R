@@ -58,7 +58,20 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
     makecheck = TRUE 
   )
   
-  return(mod)
+  df_out <- mod %>% 
+    dplyr::select(date, gpp, aet = transp, pet) %>% 
+    left_join(df_forcing %>% dplyr::select(date, ppfd, fapar),
+              by = "date") %>% 
+    rowwise() %>% 
+    mutate(ppfd = ppfd * 60 * 60 * 24,
+           year = lubridate::year(date),
+           alpha = aet/pet,
+           apar = fapar * ppfd) %>% 
+    dplyr::select(-aet, -pet, -ppfd) %>% 
+    group_by(year) %>% 
+    summarise(gpp = sum(gpp), apar = sum(apar), alpha = mean(alpha))
+  
+  return(df_out)
   
 }
 

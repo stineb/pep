@@ -212,10 +212,7 @@ df_pmodel <- df %>%
   left_join(df_sites %>% 
               rename(id_cell = sitename),
             by = c("lon_mid", "lat_mid")) %>% 
-  
-  ## xxx try 1/500
   ungroup() %>% 
-  slice(1:28) %>% 
   
   ## run p-model
   mutate(out_pmodel = purrr::map2(data, id_cell, 
