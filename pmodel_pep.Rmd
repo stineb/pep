@@ -233,84 +233,63 @@ df_pmodel <- df %>%
 save(df_pmodel, file = "data/df_pmodel.RData")
 ```
 
-Test
+Compare to LPJ-GUESS from Zani et al.
 ```{r}
-df_pmodel$out_pmodel[[2]] %>% 
-  dplyr::filter(year(date) %in% 1977:1980) %>% 
-  # slice(1:1000) %>% 
-  ggplot(aes(date, gpp)) + 
-  geom_line()
+df_comb <- df_pmodel %>% 
+  unnest(out_pmodel) %>% 
+  right_join(df, by = c("id_species_site", "year"))
 
-test <- df_pmodel$out_pmodel[[1]] %>% 
-  mutate(year = lubridate::year(date)) %>% 
-  group_by(year) %>% 
-  summarise_if(is.numeric, max, na.rm = TRUE)
+df_comb %>% analyse_modobs2("cA_tot", "gpp", type = "heat")
 
-plot(test$gpp, type = "l")
-```
-
-Weirdly low gpp values!
-```{r}
-## xxx debug
-df_pheno = df_pmodel$data[[1]]
-df_forcing = ddf_meteo %>% dplyr::filter(sitename == "icell_1") %>% unnest(data)
-df_siteinfo = df_sites %>% dplyr::filter(sitename == "icell_1")
-
-## compare to fluxnet data from germany
-load("~/data/rsofun_benchmarking/df_drivers_fluxnet2015.Rdata")
-tmp <- df_drivers_fluxnet2015 %>% 
-  dplyr::filter(str_detect(sitename, "DE")) %>% 
-  dplyr::select(forcing) %>% 
-  unnest(forcing) %>% 
-  mutate(prec = prec / (60*60*24), ppfd = ppfd / (60*60*24))
-
-ggplot() +
-  geom_histogram(data = tmp, aes(x = prec, y = ..density..), alpha = 0.5) +
-  geom_histogram(data = df_forcing, aes(x = prec, y = ..density..), alpha = 0.5, fill = "red") + 
-  xlim(-0.0001, 0.0005)
-
-ggplot() +
-  geom_histogram(data = tmp, aes(x = ppfd, y = ..density..), alpha = 0.5) +
-  geom_histogram(data = df_forcing, aes(x = ppfd, y = ..density..), alpha = 0.5, fill = "red")
-
-skim(tmp)
-skim(df_forcing)
+df_comb %>% 
+  ggplot(aes(x = cA_tot, y = gpp, color = off)) + 
+  geom_point()
 ```
 
 
+<!-- Test -->
+<!-- ```{r} -->
+<!-- df_pmodel$out_pmodel[[2]] %>%  -->
+<!--   dplyr::filter(year(date) %in% 1977:1980) %>%  -->
+<!--   # slice(1:1000) %>%  -->
+<!--   ggplot(aes(date, gpp)) +  -->
+<!--   geom_line() -->
 
-```{r}
-params_siml <- list(
-  spinup             = TRUE,      # to bring soil moisture to steady state
-  spinupyears        = 10,        # number of spinup years. 10 is enough for soil moisture.
-  recycle            = 1,         # number of years recycled during spinup 
-  soilmstress        = FALSE,     # boolean for whether soil moisture stress function is included
-  tempstress         = FALSE,     # boolean for whether temperature stress function is included
-  calc_aet_fapar_vpd = FALSE,     # set to FALSE - should be dropped again
-  in_ppfd            = TRUE,      # if available from forcing files, set to TRUE
-  in_netrad          = FALSE     # if available from forcing files, set to TRUE
-	)
+<!-- test <- df_pmodel$out_pmodel[[1]] %>%  -->
+<!--   mutate(year = lubridate::year(date)) %>%  -->
+<!--   group_by(year) %>%  -->
+<!--   summarise_if(is.numeric, max, na.rm = TRUE) -->
 
-params_modl <- list(
-	kphio           = 0.09423773,
-	soilm_par_a     = 0.33349283,
-	soilm_par_b     = 1.45602286
-	)
+<!-- plot(test$gpp, type = "l") -->
+<!-- ``` -->
 
-df_soiltexture <- bind_rows(
-  top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
-  bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1)
-)
+<!-- Weirdly low gpp values! -->
+<!-- ```{r} -->
+<!-- ## xxx debug -->
+<!-- df_pheno = df_pmodel$data[[1]] -->
+<!-- df_forcing = ddf_meteo %>% dplyr::filter(sitename == "icell_1") %>% unnest(data) -->
+<!-- df_siteinfo = df_sites %>% dplyr::filter(sitename == "icell_1") -->
 
-df_drivers <- collect_drivers_sofun( 
-  siteinfo       = df_sites,
-  params_siml    = params_siml,
-  meteo          = ddf_watch, 
-  fapar          = df_modis_fpar,
-  co2            = df_co2,
-  df_soiltexture = df_soiltexture
-  )
-df_drivers
-```
+<!-- ## compare to fluxnet data from germany -->
+<!-- load("~/data/rsofun_benchmarking/df_drivers_fluxnet2015.Rdata") -->
+<!-- tmp <- df_drivers_fluxnet2015 %>%  -->
+<!--   dplyr::filter(str_detect(sitename, "DE")) %>%  -->
+<!--   dplyr::select(forcing) %>%  -->
+<!--   unnest(forcing) %>%  -->
+<!--   mutate(prec = prec / (60*60*24), ppfd = ppfd / (60*60*24)) -->
+
+<!-- ggplot() + -->
+<!--   geom_histogram(data = tmp, aes(x = prec, y = ..density..), alpha = 0.5) + -->
+<!--   geom_histogram(data = df_forcing, aes(x = prec, y = ..density..), alpha = 0.5, fill = "red") +  -->
+<!--   xlim(-0.0001, 0.0005) -->
+
+<!-- ggplot() + -->
+<!--   geom_histogram(data = tmp, aes(x = ppfd, y = ..density..), alpha = 0.5) + -->
+<!--   geom_histogram(data = df_forcing, aes(x = ppfd, y = ..density..), alpha = 0.5, fill = "red") -->
+
+<!-- skim(tmp) -->
+<!-- skim(df_forcing) -->
+<!-- ``` -->
+
 
 

@@ -1,5 +1,7 @@
 run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_siml, params_modl, df_soiltexture){
   
+  print(df_siteinfo)
+  
   ## generate fapar time series for this site-species and each year
   useyears <- min(df_pheno$year):max(df_pheno$year)
   df_fapar <- map_dfr(as.list(useyears), ~gen_fapar_tseries(df_pheno, .))
@@ -58,6 +60,11 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
     makecheck = TRUE 
   )
   
+  ## determine DOY when daylength falls below 11 h. THIS WORKS ONLY FOR THE NORTHERN HEMISPHERE!
+  vec_dayl <- geosphere::daylength(df_siteinfo$lat, 1:365)
+  vec_dayl[1:lubridate::yday("21-06-2001")] <- 9999 # first half of the year
+  doy_11h <- min(which(vec_dayl < 11))
+  
   df_out <- mod %>% 
     dplyr::select(date, gpp, aet = transp, pet) %>% 
     left_join(df_forcing %>% dplyr::select(date, ppfd, fapar),
@@ -68,8 +75,17 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
            alpha = aet/pet,
            apar = fapar * ppfd) %>% 
     dplyr::select(-aet, -pet, -ppfd) %>% 
+    mutate(doy = lubridate::yday(date)) %>% 
+    rowwise() %>% 
+    
+    ## don't accumulate after daylength falls below 11 h
+    mutate(gpp = ifelse(doy >= doy_11h, 0, gpp),
+           apar = ifelse(doy >= doy_11h, 0, apar),
+           alpha = ifelse(doy >= doy_11h, NA, alpha)) %>% 
+  
+    ## take sum/mean  
     group_by(year) %>% 
-    summarise(gpp = sum(gpp), apar = sum(apar), alpha = mean(alpha))
+    summarise(gpp = sum(gpp), apar = sum(apar), alpha = mean(alpha, na.rm = TRUE))
   
   return(df_out)
   
