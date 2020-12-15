@@ -33,6 +33,8 @@ df <- list_df %>%
   bind_rows(.id = "filnam") %>% 
   as_tibble() %>%  
   mutate(date = ymd(date))
+
+save(df, file = "data/df_PEP725_alldata.RData")
 ```
 
 ### Interpretation of phenological states
@@ -45,8 +47,10 @@ BBCH94 is not available in this dataset. Using BCCH205 instead (autumnal coloura
 
 This information is given in column `phase_id`.
 ```{r eval=do_eval}
+load("data/df_PEP725_alldata.RData")
+
 df_sub <- df %>% 
-  filter(phase_id %in% c(10, 11, 13, 95, 205)) %>% 
+  dplyr::filter(phase_id %in% c(10, 11, 13, 95, 205)) %>% 
   mutate(id = paste0("i", 1:n())) %>% 
   mutate(pheno = ifelse(phase_id %in% c(10, 11, 13), "on", ifelse(phase_id %in% c(95, 205), "off", NA))) %>% 
   mutate(date = ymd(date)) %>% 
@@ -58,7 +62,7 @@ df_sub <- df %>%
 Determine unique "sites".
 ```{r eval=do_eval}
 df_sites <- df_sub %>% 
-  select(lon, lat, elv) %>% 
+  dplyr::select(lon, lat, elv) %>% 
   distinct() %>% 
   mutate(id_site = paste0("site_i", 1:n()))
 
@@ -69,7 +73,7 @@ df_sub <- df_sub %>%
 Determine unique species x "sites".
 ```{r eval=do_eval}
 df_species_sites <- df_sub %>% 
-  select(lon, lat, elv, species) %>% 
+  dplyr::select(lon, lat, elv, species) %>% 
   distinct() %>% 
   mutate(id_species_site = paste0("species_site_i", 1:n()))
 
@@ -80,7 +84,7 @@ df_sub <- df_sub %>%
 Determine unique species x "sites" x pheno-event.
 ```{r eval=do_eval}
 df_pheno_species_sites <- df_sub %>% 
-  select(lon, lat, elv, species, pheno) %>% 
+  dplyr::select(lon, lat, elv, species, pheno) %>% 
   distinct() %>% 
   mutate(id_pheno_species_site = paste0("pheno_species_site_i", 1:n()))
 
@@ -96,10 +100,10 @@ n_years <- function(vec){length(unique(vec))}
 df_retain <- df_sub %>% 
   group_by(id_species_site) %>% 
   summarise(n_years = n_years(year)) %>% 
-  filter(n_years >= 15)
+  dplyr::filter(n_years >= 15)
 
 df_sub <- df_sub %>% 
-  filter(id_species_site %in% unique(df_retain$id_species_site))
+  dplyr::filter(id_species_site %in% unique(df_retain$id_species_site))
 ```
 
 Remove dates deviating from an individual’s median more than 3 times the median absolute deviation.
@@ -109,22 +113,24 @@ medabsdev <- function(vec){abs(vec - median(vec)) / median(abs(vec - median(vec)
 df_retain <- df_sub %>% 
   group_by(id_pheno_species_site, pheno) %>% 
   summarise(medabsdev = medabsdev(day)) %>% 
-  filter(medabsdev < 3)
+  dplyr::filter(medabsdev < 3)
 
 df_sub <- df_sub %>% 
-  filter(id_pheno_species_site %in% unique(df_retain$id_pheno_species_site))
+  dplyr::filter(id_pheno_species_site %in% unique(df_retain$id_pheno_species_site))
 ```
 
-Remove time series for which the standard deviation of phenological observations across years was higher than 15 for leaf-out and 20 for leaf senescence.
-```{r eval=do_eval}
-df_retain <- df_sub %>% 
-  group_by(id_pheno_species_site, pheno) %>% 
-  summarise(sd = sd(day)) %>% 
-  filter((sd <= 15.0 & pheno == "on") | (sd <= 20.0 & pheno == "off"))
+DROPPED THIS CRITERION BECAUSE IT REMOVES TOO MANY HIGH LATITUDE POINTS - WE WANT A WIDE SPATIAL GRADIENT
 
-df_sub <- df_sub %>% 
-  filter(id_pheno_species_site %in% unique(df_retain$id_pheno_species_site))
-```
+<!-- Remove time series for which the standard deviation of phenological observations across years was higher than 15 for leaf-out and 20 for leaf senescence. -->
+<!-- ```{r eval=do_eval} -->
+<!-- df_retain <- df_sub %>%  -->
+<!--   group_by(id_pheno_species_site, pheno) %>%  -->
+<!--   summarise(sd = sd(day)) %>%  -->
+<!--   dplyr::filter((sd <= 15.0 & pheno == "on") | (sd <= 20.0 & pheno == "off")) -->
+
+<!-- df_sub <- df_sub %>%  -->
+<!--   dplyr::filter(id_pheno_species_site %in% unique(df_retain$id_pheno_species_site)) -->
+<!-- ``` -->
 
 Save intermediate file.
 ```{r eval=do_eval}
