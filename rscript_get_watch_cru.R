@@ -5,6 +5,13 @@ library(ingestr)
 load("data/df_zani_cells.RData")
 load("data/df_mine_cells.RData")
 
+df_zani_cells <- df_zani_cells %>% 
+  mutate(sitename = paste0("icell_", 1:n()))
+
+df_mine_cells <- df_mine_cells %>% 
+  mutate(sitename = paste0("icell_", 1:n()))
+
+
 ddf_watch_zani <- ingest(
   siteinfo = df_zani_cells,
   source    = "watch_wfdei",
