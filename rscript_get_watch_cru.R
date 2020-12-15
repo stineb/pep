@@ -1,5 +1,7 @@
 #!/usr/bin/env Rscript
 
+library(ingestr)
+
 load("data/df_zani_cells.RData")
 load("data/df_mine_cells.RData")
 
