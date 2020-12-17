@@ -127,7 +127,7 @@ if (ncores > 1){
                 dplyr::select(-lon, -lat),
               by = c("lon_mid", "lat_mid")) %>% 
     ungroup() %>% 
-
+    
     ## partition to cores    
     multidplyr::partition(cl) %>%
 
