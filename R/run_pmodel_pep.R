@@ -1,6 +1,6 @@
 run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_siml, params_modl, df_soiltexture){
   
-  print(df_siteinfo)
+  print(df_pheno[1,])
   
   ## generate fapar time series for this site-species and each year
   useyears <- min(df_pheno$year):max(df_pheno$year)
@@ -66,14 +66,15 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
   doy_11h <- min(which(vec_dayl < 11))
   
   df_out <- mod %>% 
-    dplyr::select(date, gpp, aet = transp, pet) %>% 
+    dplyr::select(date, gpp, vcmax, aet = transp, pet) %>% 
     left_join(df_forcing %>% dplyr::select(date, ppfd, fapar),
               by = "date") %>% 
     rowwise() %>% 
     mutate(ppfd = ppfd * 60 * 60 * 24,
            year = lubridate::year(date),
            alpha = aet/pet,
-           apar = fapar * ppfd) %>% 
+           apar = fapar * ppfd,
+           rd = 0.015 * vcmax * 60 * 60 * 24 * 12.0107) %>% 
     dplyr::select(-aet, -pet, -ppfd) %>% 
     mutate(doy = lubridate::yday(date)) %>% 
     rowwise() %>% 
@@ -81,11 +82,12 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
     ## don't accumulate after daylength falls below 11 h
     mutate(gpp = ifelse(doy >= doy_11h, 0, gpp),
            apar = ifelse(doy >= doy_11h, 0, apar),
-           alpha = ifelse(doy >= doy_11h, NA, alpha)) %>% 
+           alpha = ifelse(doy >= doy_11h, NA, alpha),
+           rd = ifelse(doy >= doy_11h, 0, rd)) %>% 
   
     ## take sum/mean  
     group_by(year) %>% 
-    summarise(gpp = sum(gpp), apar = sum(apar), alpha = mean(alpha, na.rm = TRUE))
+    summarise(gpp = sum(gpp), rd = sum(rd), apar = sum(apar), alpha = mean(alpha, na.rm = TRUE))
   
   return(df_out)
   
