@@ -8,6 +8,9 @@ library(magrittr)
 library(multidplyr)
 library(rlang)
 library(lubridate)
+library(ingestr)
+library(readr)
+library(rsofun)
 
 source("R/run_pmodel_pep.R")
 
@@ -103,7 +106,7 @@ if (ncores > 1){
 
   ## set up cluster
   cl <- multidplyr::new_cluster(ncores) %>%
-    multidplyr::cluster_library(c("dplyr", "purrr", "tidyr", "dplyr", "magrittr", "rlang", "rsofun")) %>%
+    multidplyr::cluster_library(c("dplyr", "purrr", "tidyr", "dplyr", "magrittr", "rlang", "rsofun", "ingestr", "geosphere")) %>%
     multidplyr::cluster_assign(run_pmodel_pep = run_pmodel_pep) %>%
     multidplyr::cluster_assign(gen_fapar_tseries = gen_fapar_tseries) %>%
     multidplyr::cluster_assign(ddf_meteo_mine = ddf_meteo_mine) %>%
