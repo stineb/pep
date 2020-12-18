@@ -263,6 +263,8 @@ CO2
 df_co2 <- read_csv("~/data/co2/cCO2_rcp85_const850-1765.csv")
 ```
 
+XXX ALL BELOW IS NOT YET UPDATED
+
 
 ```{r}
 params_siml <- list(
