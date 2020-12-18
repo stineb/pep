@@ -1,5 +1,5 @@
 ---
-title: "P-model simulations for PEP725 data"
+title: "Prepare data"
 author: "Beni Stocker"
 date: "12/2/2020"
 output: html_document
@@ -18,6 +18,13 @@ do_eval <- TRUE
 ```
 
 # Data preparation
+
+This is to analyse and correct phenological dates in the cleaned datasets obtained by Zani and produced by cleaning steps in `pep.Rmd`. It produces files:
+
+- `data/df_zani_corrected.RData`
+- `data/df_mine.RData`
+- `data/df_zani_cells.RData`
+- `data/df_mine_cells.RData`
 
 Read the data complemented with drivers, obtained from Constantin Zohner (7.12.2020).
 ```{r}
@@ -86,7 +93,17 @@ df_mine <- df_sub %>%
   distinct() %>% 
   left_join(df_orig, by = c("s_id", "species", "year", "pheno")) %>% 
   pivot_wider(names_from = "pheno", values_from = "day") %>% 
-  drop_na(on, off)
+  drop_na(on, off) %>% 
+  mutate(id_species_site = paste0(s_id, "_", species))
+
+# ## test - ok!
+# tmp <- df_mine %>% 
+#   dplyr::select(s_id, species, id_species_site, year, on, off) %>% 
+#   left_join(
+#     df_zani %>% 
+#       dplyr::select(s_id, species, id_species_site, year, on, off),
+#     by = c("id_species_site", "year")
+#   )
 ```
 
 ## Overview of sites.
@@ -145,7 +162,6 @@ df_zani <- df_zani %>%
   group_by(lon_mid, lat_mid) %>% 
   drop_na(lon_mid, lat_mid)
 
-save(df_zani, file = "data/df_zani_corrected.RData")
 ```
 
 My data.
@@ -176,10 +192,40 @@ df_mine <- df_mine %>%
 df_mine <- df_mine %>% 
   group_by(lon_mid, lat_mid) %>% 
   drop_na(lon_mid, lat_mid)
-
-save(df_mine, file = "data/df_mine.RData")
 ```
 
+Complement with elevation data.
+```{r}
+df_zani <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>% 
+  as_tibble() %>% 
+  dplyr::select(s_id, alt, alt_dem, lon, lat) %>% 
+  distinct() %>% 
+  mutate(elv = ifelse(is.na(alt), alt_dem, alt)) %>% 
+  dplyr::select(-alt, -alt_dem) %>% 
+  right_join(df_zani, by = c("lon", "lat", "s_id"))
+
+df_mine <- df_mine %>% 
+  mutate(elv = ifelse(is.na(alt), alt_dem, alt))
+
+## fill missing elv by mean
+mean_elv <- mean(df_zani$elv, na.rm = TRUE)
+
+df_zani <- df_zani %>% 
+  rowwise() %>% 
+  mutate(elv = ifelse(is.na(elv), mean_elv, elv)) %>% 
+  ungroup()
+
+df_mine <- df_mine %>% 
+  rowwise() %>% 
+  mutate(elv = ifelse(is.na(elv), mean_elv, elv)) %>% 
+  ungroup()
+```
+
+Save corrected and complemented data to files.
+```{r}
+save(df_mine, file = "data/df_mine.RData")
+save(df_zani, file = "data/df_zani_corrected.RData")
+```
 
 Get all gridcells with at least one site.
 ```{r}
@@ -204,147 +250,20 @@ df_mine_cells <- df_mine %>%
   mutate(sitename = paste0("icell_", 1:n()))
 
 save(df_mine_cells, file = "data/df_mine_cells.RData")
-
-  
-## complement with elevation data
-df_zani <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>% 
-  as_tibble() %>% 
-  dplyr::select(s_id, alt, alt_dem, lon, lat) %>% 
-  distinct() %>% 
-  mutate(elv = ifelse(is.na(alt), alt_dem, alt)) %>% 
-  dplyr::select(-alt, -alt_dem) %>% 
-  right_join(df_zani, by = c("lon", "lat", "s_id"))
-
-df_mine <- df_mine %>% 
-  mutate(elv = ifelse(is.na(alt), alt_dem, alt))
-
-## fill missing elv by mean
-mean_elv <- mean(df_zani$elv, na.rm = TRUE)
-df_zani <- df_zani %>% 
-  rowwise() %>% 
-  mutate(elv = ifelse(is.na(elv), mean_elv, elv)) %>% 
-  ungroup()
-df_mine <- df_mine %>% 
-  rowwise() %>% 
-  mutate(elv = ifelse(is.na(elv), mean_elv, elv)) %>% 
-  ungroup()
 ```
 
 ## Get data.
 
 This is done now by `rscript_get_watch_cru.R` and `submit_get_watch_cru.sh`
 
-Combine the two meteo data frames into one, containing `ccov` (cloud cover) from CRU and all other variables from FLUXNET.
-```{r}
-load("data/ddf_watch_zani.RData")
-load("data/ddf_cru_zani.RData")
-
-ddf_meteo_zani <- ddf_watch_zani %>% 
-  tidyr::unnest(data) %>% 
-  left_join(
-    ddf_cru_zani %>% 
-      tidyr::unnest(data),
-    by = c("sitename", "date")
-  ) %>% 
-  group_by(sitename) %>% 
-  tidyr::nest()
-```
-
-```{r}
-load("data/ddf_watch_mine.RData")
-load("data/ddf_cru_mine.RData")
-
-ddf_meteo_mine <- ddf_watch_mine %>% 
-  tidyr::unnest(data) %>% 
-  left_join(
-    ddf_cru_mine %>% 
-      tidyr::unnest(data),
-    by = c("sitename", "date")
-  ) %>% 
-  group_by(sitename) %>% 
-  tidyr::nest()
-```
-
-CO2
-```{r}
-df_co2 <- read_csv("~/data/co2/cCO2_rcp85_const850-1765.csv")
-```
-
 ## Run model
->>>>>>> 8cced2925526d4ee9500ecd6f1b082344bf12401
 
-```{r}
-params_siml <- list(
-  spinup             = TRUE,
-  spinupyears        = 10,
-  recycle            = 1,
-  soilmstress        = TRUE,
-  tempstress         = TRUE,
-  calc_aet_fapar_vpd = FALSE,
-  in_ppfd            = TRUE,
-  in_netrad          = FALSE,
-  outdt              = 1,
-  ltre               = FALSE,
-  ltne               = FALSE,
-  ltrd               = FALSE,
-  ltnd               = FALSE,
-  lgr3               = TRUE,
-  lgn3               = FALSE,
-  lgr4               = FALSE
-	)
-
-## calibrated parameters for v3.0 (see https://rpubs.com/stineb/rsofun_benchmark_v30)
-params_modl <- list(
-	kphio           = 0.09423773,
-	soilm_par_a     = 0.33349283,
-	soilm_par_b     = 1.45602286,
-	vpdstress_par_a = 9999,
-	vpdstress_par_b = 9999,
-	vpdstress_par_m = 9999
-	)
-
-df_soiltexture <- bind_rows(
-  top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
-  bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1)
-)
-```
-
-### Zani
-
-```{r}  
-df_pmodel_zani <- df_zani %>% 
-  
-  ## nest by site-species (timeseries)
-  group_by(id_species_site, lon_mid, lat_mid) %>% 
-  nest() %>% 
-  
-  ## add id_cell column
-  left_join(df_zani_cells %>% 
-              dplyr::select(-lon, -lat),
-            by = c("lon_mid", "lat_mid")) %>% 
-  ungroup() %>% 
-  
-  ## run p-model
-  mutate(out_pmodel = purrr::map2(data, sitename, 
-                                  ~run_pmodel_pep(
-                                    .x,
-                                    ddf_meteo_zani %>% 
-                                      dplyr::filter(sitename == .y) %>% 
-                                      unnest(data),
-                                    df_co2,
-                                    df_zani_cells %>% 
-                                      dplyr::filter(sitename == .y),
-                                    params_siml, 
-                                     params_modl, 
-                                    df_soiltexture 
-                                  ))) %>% 
-  dplyr::select(-data)
-
-save(df_pmodel_zani, file = "data/df_pmodel_zani.RData")
-```
+Done now in `rscript_run_pmodel_pep.R`. 
 
 Compare to LPJ-GUESS from Zani et al.
 ```{r}
+load("data/df_pmodel_zani.RData")
+
 df_comb <- df_pmodel_zani %>% 
   unnest(out_pmodel) %>% 
   right_join(df_zani, by = c("id_species_site", "year")) %>% 

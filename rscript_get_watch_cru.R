@@ -1,8 +1,11 @@
 #!/usr/bin/env Rscript
 
+library(ingestr)
+
 load("data/df_zani_cells.RData")
 load("data/df_mine_cells.RData")
 
+## added here as a crude fix
 df_zani_cells <- df_zani_cells %>% 
   mutate(sitename = paste0("icell_", 1:n()))
 
