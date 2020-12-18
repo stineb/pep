@@ -364,7 +364,7 @@ GPP is based on corrected SOS dates.
 
 ## Data loading
 
-Add GPP from P-model siulations. XXX these are based on faulty EOS dates from Zani!!!
+Add GPP from P-model siulations.
 ```{r}
 load("data/df_pmodel_zani.RData")
 
@@ -380,6 +380,174 @@ Check consistency of P-model and LPJ-GUESS GPP.
 out <- df_anl %>% 
   analyse_modobs2("cA_tot", "gpp_net", type = "heat")
 out$gg
+```
+
+## IAV 
+
+With GPP from P-model: positive!
+```{r}
+Fit_IAV_gpp = lmer(off ~ gpp_net + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV_gpp)
+r.squaredGLMM(Fit_IAV_gpp)
+plot(allEffects(Fit_IAV_gpp))
+```
+
+
+We can re-create Fig. 1A in Zani et al. This shows correlation of points, pooling data from all species, and after "removing" the random factor 'site'. This essentially removes the spatial variation! This uses code adopted from `ModelAnalyses_1_Correlation&PathAnalyses_Figures1.R`.
+
+Do the same with GPP from P-model.
+```{r}
+remove_randomfactor <- function(df){
+
+  df <- df %>% 
+    dplyr::filter(!is.na(gpp_net))
+  
+  if (nrow(df) > 30){
+    # fit model
+    f1 <- lmer(off ~ gpp_net + (1|id_site), data = df)
+
+    # Predict the data, removing the grouping value
+    fix.pred1 <- predict(f1, re.form = NA)
+
+    # To remove the random effects term and view the original spread of the data
+    # with just the random noise added, add the residual error back
+    # onto the predicted values
+    y.adj1 <- fix.pred1 + resid(f1)
+
+    # Store results
+    df$off_norandom <- y.adj1 
+  } else {
+    df$off_norandom <- NA
+  }
+
+  return(df)
+}
+
+df_tmp <- df_anl %>%
+  group_by(species) %>%
+  nest() %>%
+  mutate(data = map(data, ~remove_randomfactor(.))) %>%
+  unnest(data)
+
+out <- df_tmp %>%
+  analyse_modobs2("gpp_net", "off_norandom", type = "heat")
+out$gg +
+  coord_cartesian(ylim = c(200, 350))
+```
+
+
+## Long-term
+
+Separating the temporal trends from the relationship with A using LMMs. Without interactions between A and year.
+```{r}
+# P-model GPP
+Fit_LT_gpp = lmer(off ~ scale(gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT_gpp) 
+plot(allEffects(Fit_LT_gpp))
+```
+
+## LUE vs APAR
+
+(P-model only)
+
+Separation of GPP in LUE and APAR.
+```{r}
+# P-model LUE and APAR (no time!)
+Fit_LT_lue = lmer(off ~ scale(lue) + scale(apar) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT_lue) 
+plot(allEffects(Fit_LT_lue))
+plot_model(Fit_LT_lue, type = "eff", terms = c("gpp", "lue[2020,1960,1890]"), title = "",axis.title = c("gpp","off"), legend.title = "lue") + theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "bottom") 
+r.squaredGLMM(Fit_LT_lue)
+```
+
+## Anomalies
+
+Let's try to separate annual anomalies and site-level mean (of years 1970-2000).
+```{r}
+separate_anom <- function(df){
+  df_mean <- df %>% 
+    dplyr::filter(year %in% 1970:2000) %>% 
+    summarise(mean_gpp_net = mean(gpp_net, na.rm = TRUE))
+  df %>% 
+    mutate(mean_gpp_net = df_mean$mean_gpp_net,
+           anom_gpp_net = gpp_net - df_mean$mean_gpp_net
+           )
+}
+df_anl <- df_anl %>% 
+  group_by(id_species_site) %>% 
+  nest() %>% 
+  mutate(data = map(data, ~separate_anom(.))) %>% 
+  unnest(data)
+
+## gpp_net
+Fit_LT_anom = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT_anom)
+plot(allEffects(Fit_LT_anom))
+r.squaredGLMM(Fit_LT_anom)
+```
+
+
+## Spatial by species
+
+Aggregate years, to get a "spatial" data frame, distinguishing species.
+```{r}
+df_spatial_sps <- df_anl %>% 
+  group_by(id_site, species) %>% 
+  summarise(gpp_net = mean(gpp_net, na.rm = TRUE),
+            off = mean(off, na.rm = TRUE))
+
+Fit_bySps_gpp_net = lmer(off ~ gpp_net + (1|species), data = df_spatial_sps, na.action = "na.exclude")
+summary(Fit_bySps_gpp_net)
+plot(allEffects(Fit_bySps_gpp_net))
+r.squaredGLMM(Fit_bySps_gpp_net)
+```
+There is still a negative relationship between EOS and A, but not with GPP from P-model.
+
+# P-model-GPP, sampled sites
+
+GPP is based on corrected SOS dates.
+Spatially sampled sites.
+
+When using un-sampled sites, results look ~identical to using Zani sites.
+
+## Data loading
+
+Add GPP from P-model siulations.
+```{r}
+load("data/df_mine.RData")
+load("data/df_pmodel_mine.RData")
+
+df_anl <- df_pmodel_zani %>% 
+  unnest(out_pmodel) %>% 
+  right_join(df_mine, by = c("id_species_site", "year", "lon_mid", "lat_mid")) %>% 
+  mutate(gpp_net = gpp - rd,
+         lue = gpp / apar) %>% 
+  rename(id_site = s_id)
+```
+
+Sample one time series per 0.5 deg gridcell.
+```{r}
+set.seed(189)
+df_sites_sampled <- df_anl %>% 
+  dplyr::select(id_species_site, lon_mid, lat_mid) %>% 
+  distinct() %>% 
+  group_by(lon_mid, lat_mid) %>% 
+  sample_n(1)
+```
+
+Subset original data frame based on this selection.
+```{r}
+df_anl <- df_anl %>% 
+  dplyr::filter(id_species_site %in% df_sites_sampled$id_species_site)
+
+# test : should have ~19.000 rows - ok
+df_sites <- df_anl %>% 
+  dplyr::select(id_site, lon, lat, elv) %>% 
+  distinct()
+
+plot_map_simpl(lonmin = -10, lonmax = 40, latmin = 35, latmax = 70) +
+  geom_point(data = df_sites, aes(x = lon, y = lat, color = elv)) +
+  scale_color_viridis_c()
 ```
 
 ## IAV 
