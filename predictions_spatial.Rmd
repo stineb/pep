@@ -1,0 +1,775 @@
+---
+title: "predictions_spatial"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(ingestr)
+library(ggplot2)
+library(phenor)
+library(geosphere)
+do_eval <- TRUE
+```
+
+Read the data complemented with drivers, obtained from Constantin Zohner (7.12.2020).
+```{r}
+df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
+  as_tibble() %>% 
+  rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
+         anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
+         species = Species, id_site = PEP_ID, id_species_site = timeseries) #%>% 
+  
+  ## use the on-water-stressed version of A
+  #mutate(cA_tot = `cA_tot-w`)
+```
+
+Bin the data into 0.5 deg grid points.
+```{r}
+## bin
+dlon <- 1
+dlat <- 1
+lon_breaks <- seq(from = floor(min(df$lon)), to = ceiling(max(df$lon)), by = dlon)
+lat_breaks <- seq(from = floor(min(df$lat)), to = ceiling(max(df$lat)), by = dlat)
+
+df <- df %>%
+  ungroup() %>% 
+  mutate(ilon = cut(lon, 
+                    breaks = lon_breaks
+                    ),
+         ilat = cut(lat, 
+                    breaks = lat_breaks
+                    )
+         ) %>% 
+  mutate(lon_lower = as.numeric( sub("\\((.+),.*", "\\1", ilon)),
+         lon_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilon) ),
+         lat_lower = as.numeric( sub("\\((.+),.*", "\\1", ilat) ),
+         lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) )
+         ) %>% 
+  mutate(lon_mid = (lon_lower + lon_upper)/2,
+         lat_mid = (lat_lower + lat_upper)/2)
+
+#View(select(df, lon, lat, ilon, ilat, lon_lower, lon_upper, lat_lower, lat_upper, lon_mid, lat_mid))
+
+df <- df %>% 
+  group_by(lon_mid, lat_mid) %>% 
+  drop_na(lon_mid, lat_mid)
+```
+
+Sample one site per gridcell.
+```{r}
+set.seed(189)
+df_sites_sampled <- df %>% 
+  dplyr::select(id_site, lon_mid, lat_mid) %>% 
+  distinct() %>% 
+  group_by(lon_mid, lat_mid) %>% 
+  sample_n(1)
+```
+
+Subset original data frame based on this selection.
+```{r}
+df_sampled <- df %>% dplyr::filter(id_site %in% df_sites_sampled$id_site)
+```
+
+## MODELS OF LEAF SENESCENCE (and drivers):
+This code is as in Zani et al. 2020
+```{r}
+# CDD (chilling temperature) - Dufrene et al. (2005)
+# DM1 and DM2 (chilling temperature, autumn daylength) - Delpierre et al. (2009)
+# TPM (chilling temperature, autumn daylength) - Lang et al. (2019)
+## Second-generation:
+# SIAM (chilling temperature, autumn daylength, spring anomaly) - Keenan and Richardson (2015)
+# TDM and TPDM (chilling temperature, autumn daylength, growing season temperature / + water stress) - Liu et al. (2019)
+## PIA:
+# PIA_gsi (chilling temperature, autumn daylength, leaf flushing date, growing season mean temperature, daylength, vapour pressure deficit)
+# PIA-/+ (chilling temperature, autumn daylength, leaf flushing date, growing season mean temperature, daylength, precipitation, net radiation, CO2 concentration, -/+ water stress)
+
+# Define functions of Autumn phenology Models
+# Modified from https://github.com/khufkens/phenor/blob/master/R/phenology_models.R
+CDD.model = function(par, data){
+  # exit the routine as some parameters are missing
+  if (length(par) != 2){
+    stop("model parameter(s) out of range (too many, too few)")
+  }
+  
+  # extract the parameter values from the
+  # par argument for readability
+  T_base = par[1]
+  F_crit = par[2]
+  
+  # create forcing/chilling rate vector
+  Rf = data$Tmini - T_base
+  Rf[Rf > 0] = 0
+  
+  # photoperiod-dependent start-date for chilling accumulation (t0)
+  # t0 is defined as the first day when daily minimum temperature is lower than a temperature threshold (T_base) 
+  # after the date of the peak multiyear average daily minimum temperature, namely the 200th day of year
+  t0 <- vector()
+  for(c in 1:ncol(data$Tmini)) {
+    interval = 1:366
+    t0A = interval[which(data$Tmini[,c] < T_base)]
+    ind1 = min(which(t0A > 200))
+    t0A = t0A[ind1]
+    t0 = c(t0,t0A)
+  }
+  # nullify values before the t0
+  for(c in 1:ncol(data$Tmini)){
+    Rf[1:t0[c],c] = 0 
+  }
+  
+  # predict date of leaf.off according to optimized F_crit
+  doy = apply(Rf,2, function(xt){
+    doy = which(cumsum(xt) <= F_crit)[1]
+  })
+  
+  return(doy)
+}
+DM1.model = function(par, data){
+  # exit the routine as some parameters are missing
+  if (length(par) != 3){
+    stop("model parameter(s) out of range (too many, too few)")
+  }
+  
+  # extract the parameter values from the
+  # par argument for readability
+  T_base = par[1]
+  P_base = par[2]
+  F_crit = par[3]
+  
+  # create forcing/chilling rate vector at the day level
+  Rf = (data$Tmini - T_base)*(data$Li/P_base) # lengthening photoperiod promoting leaf senescence
+  Rf[Rf > 0] = 0
+  
+  # photoperiod-dependent start-date for chilling accumulation (t0)
+  # t0 is defined as the first day when photoperiod is shorter than the photoperiod threshold (P_base)
+  # after the date of the longest photoperiod (summer solstice), namely, the 173rd day of year
+  t0 <- vector()
+  for(c in 1:ncol(data$Tmini)) {
+    interval = 1:366
+    t0A = interval[which(data$Li[,c] < P_base)]
+    ind1 = min(which(t0A > 173))
+    t0A = t0A[ind1]
+    t0 = c(t0,t0A)
+  }
+  
+  # nullify values before the t0
+  for(c in 1:ncol(data$Tmini)){
+    Rf[1:t0[c],c] = 0 #nullify values before the date of leaf.out
+  }
+  
+  # calculate the summation along the year (interval = 1:366) and derive the date of leaf.off
+  # DOY of budburst criterium
+  doy = apply(Rf,2, function(xt){
+    doy = which(cumsum(xt) <= F_crit)[1]
+  })
+  
+  return(doy)
+}
+DM2.model = function(par, data){
+  # exit the routine as some parameters are missing
+  if (length(par) != 3){
+    stop("model parameter(s) out of range (too many, too few)")
+  }
+  
+  # extract the parameter values from the
+  # par argument for readability
+  T_base = par[1]
+  P_base = par[2]
+  F_crit = par[3]
+  
+  # create forcing/chilling rate vector at the day level
+  Rf = (data$Tmini - T_base)*(1-(data$Li/P_base)) # shortening photoperiod promoting leaf senescence
+  Rf[Rf > 0] = 0
+  
+  # photoperiod-dependent start-date for chilling accumulation (t0)
+  # t0 is defined as the first day when photoperiod is shorter than the photoperiod threshold (P_base)
+  # after the date of the longest photoperiod (summer solstice), namely, the 173rd day of year
+  t0 <- vector()
+  for(c in 1:ncol(data$Tmini)) {
+    interval = 1:366
+    t0A = interval[which(data$Li[,c] < P_base)]
+    ind1 = min(which(t0A > 173))
+    t0A = t0A[ind1]
+    t0 = c(t0,t0A)
+  }
+  
+  # nullify values before the t0
+  for(c in 1:ncol(data$Tmini)){
+    Rf[1:t0[c],c] = 0 #nullify values before the date of leaf.out
+  }
+  
+  # calculate the summation along the year (interval = 1:366) and derive the date of leaf.off
+  # DOY of budburst criterium
+  doy = apply(Rf,2, function(xt){
+    doy = which(cumsum(xt) <= F_crit)[1]
+  })
+  
+  return(doy)
+}
+TPM.model = function(par, data){
+  # exit the routine as some parameters are missing
+  if (length(par) != 4){
+    stop("model parameter(s) out of range (too many, too few)")
+  }
+  
+  # extract the parameter values from the par argument for readability
+  P_base = par[1]
+  a = par[2]
+  b = par[3]
+  F_crit = par[4]
+  
+  # create forcing/chilling rate vector at the day level
+  Rf = 1/(1+exp(a*(data$Tmini*data$Li-b)))
+  
+  # photoperiod-dependent start-date for chilling accumulation (t0)
+  # t0 is defined as the first day when photoperiod is shorter than the photoperiod threshold (P_base)
+  # after the date of the longest photoperiod (summer solstice), namely, the 173rd day of year
+  t0 <- vector()
+  for(c in 1:ncol(data$Tmini)) {
+    interval = 1:366
+    t0A = interval[which(data$Li[,c] < P_base)]
+    ind1 = min(which(t0A > 173))
+    t0A = t0A[ind1]
+    t0 = c(t0,t0A)
+  }
+  
+  # nullify values before the t0
+  for(c in 1:ncol(data$Tmini)){
+    Rf[1:t0[c],c] = 0 #nullify values before the date of leaf.out
+  }
+  
+  # calculate the summation along the year and derive the date of leaf.off
+  # DOY of budburst criterium
+  doy = apply(Rf,2, function(xt){
+    doy = which(cumsum(xt) >= F_crit)[1]
+  })
+  
+  return(doy)
+}
+SecondGen_PIA.models = function(par, predictor, data) {
+  # exit the routine as some parameters are missing
+  if (length(par) != 5 & length(par) != 6){
+    stop("model parameter(s) out of range (too many, too few)")
+  }
+  
+  # extract the parameter values from the
+  # par argument for readability
+  P_base = as.numeric(par[1])
+  a = as.numeric(par[2])
+  b = as.numeric(par[3])
+  c = as.numeric(par[4])
+  if(length(par)==5) {
+    d = as.numeric(par[5])
+    pred = predictor
+  }
+  if(length(par)==6) {
+    d = as.numeric(par[5])
+    e = as.numeric(par[6])
+    pred1 = predictor[1]
+    pred2 = predictor[2]
+  }
+  
+  # create forcing/chilling rate vector at the day level
+  Rf = 1/(1+exp(a*(data$Tmini*data$Li-b)))
+  
+  # photoperiod-dependent start-date for chilling accumulation (t0)
+  # t0 is defined as the first day when photoperiod is shorter than the photoperiod threshold (P_base)
+  # after the date of the longest photoperiod (summer solstice), namely, the 173rd day of year
+  t0 <- vector()
+  for(col in 1:ncol(data$Tmini)) {
+    interval = 1:366
+    t0A = interval[which(data$Li[,col] < 173)]
+    ind1 = min(which(t0A > 173))
+    t0A = t0A[ind1]
+    t0 = c(t0,t0A)
+  }
+  
+  # nullify values before the t0
+  for(col in 1:ncol(data$Tmini)){
+    Rf[1:t0[col],col] = 0 
+  }
+  
+  if(length(par)==5) {
+    # add predictor at the end of the matrix-columns
+    Rf = rbind(Rf,predictor)
+    
+    # predict date of leaf.off
+    doy = apply(Rf,2, function(xt){
+      doy = which(cumsum(xt[1:366]) >= c+d*xt[367])[1]
+    }) 
+  }
+  if(length(par)==6) {
+    # add predictors at the end of the matrix-columns
+    Rf = rbind(Rf,pred1)
+    Rf = rbind(Rf,pred2)
+    
+    # predict date of leaf.off
+    doy = apply(Rf,2, function(xt){
+      doy = which(cumsum(xt[1:366]) >= c+d*xt[367]+e*xt[368])[1]
+    }) 
+  }
+  
+  return(doy)
+}
+df_sampled
+```
+
+## Forcing data: Min temperature and Photoperiod
+This forcing data are obtained from cru (min temp) using the ingestr package and the geosphere pkg (photoperiod)
+```{r}
+unique(df_sampled$lon_mid)
+sort(unique(df_sampled$lat))
+
+## Calculate Tmin from CRU with ingestr a site ensemble
+siteinfo <- unique(df_sampled[,c(3,4,5)]) %>% rename(sitename=id_site) %>% mutate(sitename=as.character(sitename)) %>%
+  mutate(year_start = 1949, year_end = 2015,date_start = lubridate::ymd(paste0(year_start, "-01-01")),
+         date_end = lubridate::ymd(paste0(year_end, "-01-02"))) %>% mutate(year_start=as.character(year_start)) %>% 
+  mutate(year_end=as.character(year_end))
+
+siteinfo <- as_tibble(siteinfo)
+
+tmin_sample_cru <- ingest(
+  siteinfo = siteinfo,
+  source    = "cru",
+  getvars   = list(temp = "tmin"),
+  dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path
+)
+save(tmin_sample_cru, file = "~/data/tmin_sample_cru.RData")
+
+load("~/data/tmin_sample_cru.RData")
+tmin_sample_cru$data[[1]]
+
+tmin <- tmin_sample_cru %>% unnest(cols=c(data))
+#tmin <- tmin %>% pivot_wider(names_from = sitename, values_from = tmin)
+#tmin <- data.matrix(tmin)
+tmin <- tmin %>% mutate(doy=yday(date),year=year(date)) %>% rename(id_site=sitename) %>% mutate(id_site=as.integer(id_site))
+tmin <- tmin %>% pivot_wider(names_from = doy, values_from = tmin) 
+#tmin.df <- tmin %>% inner_join(df_sampled[,c(3,4,5,7)]) %>% distinct() %>% relocate(year,doy,id_site,lon,lat) %>% arrange(id_site,year) %>% dplyr::select(-date)
+
+## Calculate photoperiod
+#dl <- daylength(45, 1:365)
+#tapply(dl, rep(1:12, c(31,28,31,30,31,30,31,31,30,31,30,31)), mean)
+
+all.latitudes <- unique(df_sampled$lat)
+df_photo <- list()
+for(i in 1:length(all.latitudes)) {
+  dl <- daylength(all.latitudes[i], 1:365)
+  df_photo[[i]] <- dl 
+}
+length(unique(df_sampled$year))
+length(unique(df_sampled$lat)) # include ncol
+length(unique(df_sampled$id_site))
+
+photo <- matrix(unlist(df_photo), ncol = length(unique(df_sampled$lat)))
+photo <- as.data.frame(photo)
+colnames(photo) <- all.latitudes
+photo$doy <- paste0(1:365,"tmin")
+photo <- photo %>% pivot_longer(!doy, names_to = "lat", values_to = "photoperiod") %>% arrange(lat) %>% mutate(lat=as.double(lat))
+photo <- photo %>% pivot_wider(names_from = doy, values_from = photoperiod) 
+#photo.df <- photo %>% full_join(df_sampled[,c(3,4,5,7)]) %>% distinct() %>% relocate(year) %>% relocate(id_site, .after = doy) %>% arrange(id_site,year) %>% relocate(lon, .after = id_site) 
+
+#forcing <- tmin.df %>% inner_join(photo.df)
+
+```
+
+## Import & Format data
+```{r}
+# Phenological observations
+pheno.df <- df_sampled %>% dplyr::select("id_species_site","id_site","lon","lat","species","year","off","on")
+
+# Predictors
+preds.df <- df_sampled %>% dplyr::select("id_species_site","id_site","lon","lat","species","year","on","temp_GS","RD_summer","cGSI","cA_tot","cA_tot-w")
+
+# Define model names
+models   <- c("CDD","DM1","DM2","TPM","SIAM","TDM","TPDM","PIA_gsi","PIA-","PIA+")
+
+# Define species
+sps <- unique(pheno.df$species)
+
+# Define timeseries
+id_species_site <- unique(pheno.df$id_species_site)
+
+# Prepare input datasets for PHENOR package
+phenor_input <- pheno.df %>% inner_join(forcing)
+
+# Create a DataList to store all subsets for each sps
+DataList <- replicate(length(sps), data.frame())
+names(DataList) <- paste0("DataList","_",sps)
+SiteList <- replicate(length(sps), data.frame())
+
+# Initiate an external loop to subset for each sps
+for(i in 1:length(sps)) {
+  
+  # Subset phenological dataset for each sps
+  pheno_sp.sub <- phenor_input[which(phenor_input$species==sps[i]),]
+  pheno_sp.sub <- as.data.frame(pheno_sp.sub)
+
+  # Find the sites per sps
+  sites <- unique(pheno_sp.sub$id_site)
+  SiteList[[i]] <- sites
+  
+  # Add empty subsets
+  DataList[[i]] <- replicate(length(sites),data.frame())
+  names(DataList[[i]]) <- paste0("data_",sites,"_",pheno_sp.sub[1,]$species)
+  
+  # Counter for sites
+  count  <- 0 
+  
+  # Loop for each site
+  for(site in sites){
+    index <- which(pheno_sp.sub$id_site==site)
+    data = list("doy" = as.vector(pheno_sp.sub[index,]$on),
+                "site" = as.vector(paste0(pheno_sp.sub[index,]$id_site,"_",pheno_sp.sub[1,]$species)),
+                "location" = t(pheno_sp.sub[index,c("lon","lat")]), 
+                "year" = as.vector(pheno_sp.sub[index,]$year),
+                "Ti" = NULL,
+                "Tmini" = tmin,  #t(pheno_sp.sub[index,paste0(1:366,".x")])
+                "Tmaxi" = NULL,
+                "Li" = photo,
+                "SPEI" = NULL,
+                "VPDi" = NULL,
+                "transition_dates" = as.vector(pheno_sp.sub[index,]$off),
+                "georeferencing" = NULL
+    )
+    
+    # Store each site-specific dataframe in the DataList of the corresponding sps
+    count <- count+1
+    DataList[[i]][[count]] <- data
+  }
+  print(paste0(sps[i]," DONE!"))
+}
+```
+
+```{r}
+##----------------------------------------
+## Predictions
+
+data.sub <- DataList[[i]][[count]]
+
+# Initialize dataframe
+DoYoff_Preds.df <- data.frame() 
+opt_pars.df <- data.frame() 
+
+for(i in 1:2) { #length(species)
+  
+  # Initialize datasets per species
+  DoYoff_Preds.sp <- data.frame()
+  opt_pars.sp <- data.frame()
+  
+  # Calculate number of sites per species
+  sites <- SiteList[[i]]
+  
+  for(site in 1:2) { #length(sites)
+    
+    # Subset according to id_species_site
+    ts <- paste0(sps[i],"_",sites[site])
+    data.sub <- DataList[[i]][[site]]
+    preds.sub <- preds.df #%>% filter(id_species_site==ts)
+    
+    # Initialize sub-dataframes to store results
+    DoYoff_Preds.sub <- data.frame(id_species_site=data.sub$site, species=sps[i], year=data.sub$year)
+    DoYoff_Preds.sub$Obs_DoYoff <- data.sub$transition_dates
+    opt_pars.sub <- data.frame(id_species_site=data.sub$site, species=sps[i], id_site=site) #sites
+    
+    ## Parameter optimization and Prediction of leaf senescence dates
+    # PHENOR package (Hufkenset al., 2018)
+
+    
+    ## CDD model
+    optimal_pars <- pr_fit_parameters(par = NULL,
+                                        data = data.sub,
+                                        cost = rmse,
+                                        model = "CDD.model",
+                                        method = "GenSA",
+                                        lower = c(15,-3000),
+                                        upper = c(30,0),
+                                        control = list(max.call = 40000))
+    opt_pars.sub$Tbase_CDD <- optimal_pars[1]
+    opt_pars.sub$Fcrit_CDD <- optimal_pars[2]
+    DoYoff_Preds.sub$Pred_DoYoff_CDD <- pr_predict(par = optimal_pars$par,
+                                                           data = data.sub,
+                                                           model = "CDD.model")
+    
+    ## DM1 model
+    optimal_pars <- pr_fit_parameters(par = NULL,
+                                        data = data.sub,
+                                        cost = rmse,
+                                        model = "DM1.model",
+                                        method = "GenSA",
+                                        lower = c(15,11,-2000),
+                                        upper = c(30,16,0),
+                                        control = list(max.call = 40000))
+    opt_pars.sub$Tbase_DM1 <- optimal_pars[1]
+    opt_pars.sub$Pbase_DM1 <- optimal_pars[2]
+    opt_pars.sub$Fcrit_DM1 <- optimal_pars[3]
+    DoYoff_Preds.sub$Pred_DoYoff_DM1 <- pr_predict(par = optimal_pars$par,
+                                                           data = data.sub,
+                                                           model = "DM1.model")
+    
+    ## DM2 model
+    optimal_pars <- pr_fit_parameters(par = NULL,
+                                        data = data.sub,
+                                        cost = rmse,
+                                        model = "DM2.model",
+                                        method = "GenSA",
+                                        lower = c(15,11,-2000),
+                                        upper = c(30,16,0),
+                                        control = list(max.call = 40000))
+    opt_pars.sub$Tbase_DM2 <- optimal_pars[1]
+    opt_pars.sub$Pbase_DM2 <- optimal_pars[2]
+    opt_pars.sub$Fcrit_DM2 <- optimal_pars[3]
+    DoYoff_Preds.sub$Pred_DoYoff_DM2 <- pr_predict(par = optimal_pars$par,
+                                                           data = data.sub,
+                                                           model = "DM2.model")
+    
+    ## TPM model
+    optimal_pars <- pr_fit_parameters(par = NULL,
+                                        data = data.sub,
+                                        cost = rmse,
+                                        model = "TPM.model",
+                                        method = "GenSA",
+                                        lower = c(11,0.02,100,0),
+                                        upper = c(16,0.1,250,200),
+                                        control = list(max.call = 40000))
+    opt_pars.sub$Pbase_TPM <- optimal_pars[1]
+    opt_pars.sub$a_TPM <- optimal_pars[2]
+    opt_pars.sub$b_TPM <- optimal_pars[3]
+    opt_pars.sub$Fcrit_TPM <- optimal_pars[4]
+    DoYoff_Preds.sub$Pred_DoYoff_TPM <- pr_predict(par = optimal_pars$par,
+                                                           data = data.sub,
+                                                           model = "TPM.model")
+    
+    ## SIAM model
+    optimal_pars <- pr_fit_parameters(par = NULL,
+                                        predictor = preds.sub$DoY_out,
+                                        data = data.sub,
+                                        cost = rmse,
+                                        model = "SecondGen_PIA.models",
+                                        method = "GenSA",
+                                        lower = c(11,0.02,100,0,0),
+                                        upper = c(16,0.1,250,300,1),
+                                        control = list(max.call = 40000))
+    opt_pars.sub$Pbase_SIAM <- optimal_pars[1]
+    opt_pars.sub$a_SIAM <- optimal_pars[2]
+    opt_pars.sub$b_SIAM <- optimal_pars[3]
+    opt_pars.sub$c_SIAM <- optimal_pars[4]
+    opt_pars.sub$d_SIAM <- optimal_pars[5]
+    DoYoff_Preds.sub$Pred_DoYoff_SIAM <- pr_predict(par = optimal_pars$par,
+                                                            predictor = preds.sub$DoY_out,
+                                                            data = data.sub,
+                                                            model = "SecondGen_PIA.models")
+    
+    ## TDM model
+    optimal_pars <- pr_fit_parameters(par = NULL,
+                                        predictor = preds.sub$temp_GS,
+                                        data = data.sub,
+                                        cost = rmse,
+                                        model = "SecondGen_PIA.models",
+                                        method = "GenSA",
+                                        lower = c(11,0.02,100,0,0),
+                                        upper = c(16,0.1,250,300,1),
+                                        control = list(max.call = 40000))
+    opt_pars.sub$Pbase_TDM <- optimal_pars[1]
+    opt_pars.sub$a_TDM <- optimal_pars[2]
+    opt_pars.sub$b_TDM <- optimal_pars[3]
+    opt_pars.sub$c_TDM <- optimal_pars[4]
+    opt_pars.sub$d_TDM <- optimal_pars[5]
+    DoYoff_Preds.sub$Pred_DoYoff_TDM <- pr_predict(par = optimal_pars$par,
+                                                           predictor = preds.sub$temp_GS,
+                                                           data = data.sub,
+                                                           model = "SecondGen_PIA.models")
+    
+    ## TPDM model
+    optimal_pars <- pr_fit_parameters(par = NULL,
+                                        predictor = c(preds.sub$temp_GS,preds.sub$RD_summer),
+                                        data = data.sub,
+                                        cost = rmse,
+                                        model = "SecondGen_PIA.models",
+                                        method = "GenSA",
+                                        lower = c(11,0.02,100,0,0,0),
+                                        upper = c(16,0.1,250,300,1,1),
+                                        control = list(max.call = 40000))
+    opt_pars.sub$Pbase_TPDM <- optimal_pars[1]
+    opt_pars.sub$a_TPDM <- optimal_pars[2]
+    opt_pars.sub$b_TPDM <- optimal_pars[3]
+    opt_pars.sub$c_TDPM <- optimal_pars[4]
+    opt_pars.sub$d_TPDM <- optimal_pars[5]
+    opt_pars.sub$e_TPDM <- optimal_pars[6]
+    DoYoff_Preds.sub$Pred_DoYoff_TPDM <- pr_predict(par = optimal_pars$par,
+                                                            predictor = c(preds.sub$temp_GS,preds.sub$RD_summer),
+                                                            data = data.sub,
+                                                            model = "SecondGen_PIA.models")
+    
+    ## PIA_gsi model
+    optimal_pars <- pr_fit_parameters(par = NULL,
+                                        predictor = preds.sub$cGSI,
+                                        data = data.sub,
+                                        cost = rmse,
+                                        model = "SecondGen_PIA.models",
+                                        method = "GenSA",
+                                        lower = c(11,0.02,100,0,0),
+                                        upper = c(16,0.1,250,300,1),
+                                        control = list(max.call = 40000))
+    opt_pars.sub$Pbase_PIAgsi <- optimal_pars[1]
+    opt_pars.sub$a_PIAgsi <- optimal_pars[2]
+    opt_pars.sub$b_PIAgsi <- optimal_pars[3]
+    opt_pars.sub$c_PIAgsi <- optimal_pars[4]
+    opt_pars.sub$d_PIAgsi <- optimal_pars[5]
+    DoYoff_Preds.sub$Pred_DoYoff_PIAgsi <- pr_predict(par = optimal_pars$par,
+                                                              predictor = preds.sub$cGSI,
+                                                              data = data.sub,
+                                                              model = "SecondGen_PIA.models")
+    
+    ## PIA- model
+    optimal_pars <- pr_fit_parameters(par = NULL,
+                                        predictor = preds.sub$`cA_tot-w`,
+                                        data = data.sub,
+                                        cost = rmse,
+                                        model = "SecondGen_PIA.models",
+                                        method = "GenSA",
+                                        lower = c(11,0.02,100,0,0),
+                                        upper = c(16,0.1,250,300,1),
+                                        control = list(max.call = 40000))
+    opt_pars.sub$`Pbase_PIA-` <- optimal_pars[1]
+    opt_pars.sub$`a_PIA-` <- optimal_pars[2]
+    opt_pars.sub$`b_PIA-` <- optimal_pars[3]
+    opt_pars.sub$`c_PIA-` <- optimal_pars[4]
+    opt_pars.sub$`d_PIA-` <- optimal_pars[5]
+    DoYoff_Preds.sub$`Pred_DoYoff_PIA-` <- pr_predict(par = optimal_pars$par,
+                                                              predictor = preds.sub$`cA_tot`,
+                                                              data = data.sub,
+                                                              model = "SecondGen_PIA.models")
+    
+    ## PIA+ model
+    optimal_pars <- pr_fit_parameters(par = NULL,
+                                        predictor = preds.sub$cA_tot,
+                                        data = data.sub,
+                                        cost = rmse,
+                                        model = "SecondGen_PIA.models",
+                                        method = "GenSA",
+                                        lower = c(11,0.02,100,0,0),
+                                        upper = c(16,0.1,250,300,1),
+                                        control = list(max.call = 40000))
+    opt_pars.sub$`Pbase_PIA+` <- optimal_pars[1]
+    opt_pars.sub$`a_PIA+` <- optimal_pars[2]
+    opt_pars.sub$`b_PIA+` <- optimal_pars[3]
+    opt_pars.sub$`c_PIA+` <- optimal_pars[4]
+    opt_pars.sub$`d_PIA+` <- optimal_pars[5]
+    DoYoff_Preds.sub$`Pred_DoYoff_PIA+` <- pr_predict(par = optimal_pars$par,
+                                                              predictor = preds.sub$cA_tot,
+                                                              data = data.sub,
+                                                              model = "SecondGen_PIA.models")
+    
+    # Autumn anomalies
+    DoYoff_Preds.sub$meansite_DoYoff <- mean(data.sub$transition_dates)
+    DoYoff_Preds.sub$Obs_AnomDoYoff <- data.sub$transition_dates - DoYoff_Preds.sub$meansite_DoYoff
+    DoYoff_Preds.sub$Preds_AnomDoYoff_CDD <- DoYoff_Preds.sub$Pred_DoYoff_CDD - DoYoff_Preds.sub$meansite_DoYoff
+    DoYoff_Preds.sub$Preds_AnomDoYoff_DM1 <- DoYoff_Preds.sub$Pred_DoYoff_DM1 - DoYoff_Preds.sub$meansite_DoYoff
+    DoYoff_Preds.sub$Preds_AnomDoYoff_DM2 <- DoYoff_Preds.sub$Pred_DoYoff_DM2 - DoYoff_Preds.sub$meansite_DoYoff
+    DoYoff_Preds.sub$Preds_AnomDoYoff_TPM <- DoYoff_Preds.sub$Pred_DoYoff_TPM - DoYoff_Preds.sub$meansite_DoYoff
+    DoYoff_Preds.sub$Preds_AnomDoYoff_SIAM <- DoYoff_Preds.sub$Pred_DoYoff_SIAM - DoYoff_Preds.sub$meansite_DoYoff
+    DoYoff_Preds.sub$Preds_AnomDoYoff_TDM <- DoYoff_Preds.sub$Pred_DoYoff_TDM - DoYoff_Preds.sub$meansite_DoYoff
+    DoYoff_Preds.sub$Preds_AnomDoYoff_TPDM <- DoYoff_Preds.sub$Pred_DoYoff_TPDM - DoYoff_Preds.sub$meansite_DoYoff
+    DoYoff_Preds.sub$Preds_AnomDoYoff_PIAgsi <- DoYoff_Preds.sub$Pred_DoYoff_PIAgsi - DoYoff_Preds.sub$meansite_DoYoff
+    DoYoff_Preds.sub$`Preds_AnomDoYoff_PIA-` <- DoYoff_Preds.sub$`Pred_DoYoff_PIA-` - DoYoff_Preds.sub$meansite_DoYoff
+    DoYoff_Preds.sub$`Preds_AnomDoYoff_PIA+` <- DoYoff_Preds.sub$`Pred_DoYoff_PIA+` - DoYoff_Preds.sub$meansite_DoYoff
+    
+    # Bind site-datasets
+    DoYoff_Preds.sp <- rbind(DoYoff_Preds.sp,DoYoff_Preds.sub)
+    opt_pars.sp <- rbind(opt_pars.sp,opt_pars.sub)
+    print(paste0("RUNNING: ",DoYoff_Preds.sub$id_species_site," ",site," OF ",length(sites)))
+  }
+  # Bind final datasets
+  DoYoff_Preds.df <- rbind(DoYoff_Preds.df,DoYoff_Preds.sp)
+  opt_pars.df <- rbind(opt_pars.df,opt_pars.sp)
+}
+write.table(DoYoff_Preds.df,"ModelAnalysis_1_Predicted_DoYoff.csv",sep=";",row.names = F)
+write.table(opt_pars.df,"ModelAnalysis_2_OptimalParameters.csv",sep=";",row.names = F)
+
+```
+
+
+```{r}
+##----------------------------------------
+## Model Performance
+
+## FIGURE 3A
+# Observed (Obs_AnomDoYoff) vs.
+# Predicted (Pred_AnomDoYoff)
+# leaf senescence anomalies, i.e., as deviation from the mean observed leaf-out date at each site
+# of the best-performing first-generation (TPM) [Lang et al. (2019)], 
+# second-generation (TPDM) [Liu et al. (2019)]
+# and CarbLim models (PIAM)
+
+# Import data
+DoYoff_Preds.df <- fread("ModelAnalysis_1_Predicted_DoYoff.csv")
+DoYoff_Preds.df <- DoYoff_Preds.df %>% 
+  filter(species != "Betula pubescens")
+
+# Select autumn anomalies from best-performing models
+best_pred_DoYoff <- DoYoff_Preds.df %>% 
+  select(Obs_AnomDoYoff,Pred_AnomDoYoff_TPM,Pred_AnomDoYoff_TPDM,`Pred_AnomDoYoff_PIA+`)
+
+# Format dataset for plotting
+types <- c("First-generation (TPM)","Second-generation (TPDM)","CarbLim model (PIA+)")
+colnames(best_pred_DoYoff) <- c("observations",types)
+best_pred_DoYoff <- best_pred_DoYoff %>% 
+  pivot_longer(-observations,names_to="model_type",values_to="predictions")
+best_pred_DoYoff$model_type <- factor(best_pred_DoYoff$model_type, levels=types)
+
+# Define palette
+paletteBlueRed <- c("blue3","white","red3")
+
+# Plot
+fig_3a <- ggplot(best_pred_DoYoff, aes(x=predictions, y=observations)) +
+  stat_bin2d(bins=235) +
+  labs(x = "Predicted autumn anomaly",
+       y = "Observed autumn anomaly") +
+  coord_cartesian(xlim=c(-50,50), ylim=c(-50,50))+
+  scale_fill_gradientn(colours = paletteBlueRed,
+                       limits = c(10,2300),
+                       breaks = c(100,1200,2200)) +
+  geom_abline(slope=1, intercept=0,
+              na.rm = FALSE, show.legend = NA, linetype="dashed") +
+  theme(aspect.ratio=1,
+        legend.position = "right",
+        plot.title=element_text(hjust=.5),
+        axis.title.y=element_text(size=14),
+        axis.text.y=element_text(size=11),
+        axis.title.x=element_text(size=14),
+        axis.text.x=element_text(size=11),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_rect(fill = 'white', colour = 'black'),
+        plot.margin = unit(c(0, 0, 0, 0), "cm")
+  ) + 
+  facet_wrap(.~model_type, ncol=3)
+fig_3a
+
+# Add R^2 values
+# Average across time-series
+# See Figure 2B
+dat_text <- data.frame(
+  label = c("R2 = 0.21", "R2 = 0.62", "R2 = 0.78"), #check R2_models (Figure 3B)
+  model_type = types
+)
+fig_3a  <- fig_3a + geom_text(
+  data = dat_text,
+  mapping = aes(x=-35, y=45, label=label)
+)
+
+# Calculate intercept plus slope by Standard Major Axis (SMA)
+SMA_values <- best_pred_DoYoff %>%  
+  group_by(model_type) %>% 
+  summarise(int=lmodel2(observations ~ predictions)$regression.results$Intercept[3],
+            slope=lmodel2(observations ~ predictions)$regression.results$Slope[3])
+fig_3a <- fig_3a +
+  geom_abline(data = SMA_values,
+              mapping = aes(intercept=int,slope=slope),
+              linetype = "solid")
+fig_3a
+
+```
+
