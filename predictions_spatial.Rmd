@@ -319,9 +319,6 @@ df_sampled
 ## Forcing data: Min temperature and Photoperiod
 This forcing data are obtained from cru (min temp) using the ingestr package and the geosphere pkg (photoperiod)
 ```{r}
-unique(df_sampled$lon_mid)
-sort(unique(df_sampled$lat))
-
 ## Calculate Tmin from CRU with ingestr a site ensemble
 siteinfo <- unique(df_sampled[,c(3,4,5)]) %>% rename(sitename=id_site) %>% mutate(sitename=as.character(sitename)) %>%
   mutate(year_start = 1949, year_end = 2015,date_start = lubridate::ymd(paste0(year_start, "-01-01")),
@@ -344,9 +341,9 @@ tmin_sample_cru$data[[1]]
 tmin <- tmin_sample_cru %>% unnest(cols=c(data))
 #tmin <- tmin %>% pivot_wider(names_from = sitename, values_from = tmin)
 #tmin <- data.matrix(tmin)
-tmin <- tmin %>% mutate(doy=yday(date),year=year(date)) %>% rename(id_site=sitename) %>% mutate(id_site=as.integer(id_site))
+tmin <- tmin %>% mutate(doy=paste0(yday(date),"tmin"),year=year(date)) %>% rename(id_site=sitename) %>% mutate(id_site=as.integer(id_site)) %>% dplyr::select(-date)
 tmin <- tmin %>% pivot_wider(names_from = doy, values_from = tmin) 
-#tmin.df <- tmin %>% inner_join(df_sampled[,c(3,4,5,7)]) %>% distinct() %>% relocate(year,doy,id_site,lon,lat) %>% arrange(id_site,year) %>% dplyr::select(-date)
+tmin.df <- tmin %>% inner_join(df_sampled[,c(3,4,5,7)]) %>% distinct() %>% relocate(year,id_site,lon,lat) %>% arrange(id_site,year)
 
 ## Calculate photoperiod
 #dl <- daylength(45, 1:365)
@@ -355,7 +352,7 @@ tmin <- tmin %>% pivot_wider(names_from = doy, values_from = tmin)
 all.latitudes <- unique(df_sampled$lat)
 df_photo <- list()
 for(i in 1:length(all.latitudes)) {
-  dl <- daylength(all.latitudes[i], 1:365)
+  dl <- daylength(all.latitudes[i], 1:366)
   df_photo[[i]] <- dl 
 }
 length(unique(df_sampled$year))
@@ -365,12 +362,12 @@ length(unique(df_sampled$id_site))
 photo <- matrix(unlist(df_photo), ncol = length(unique(df_sampled$lat)))
 photo <- as.data.frame(photo)
 colnames(photo) <- all.latitudes
-photo$doy <- paste0(1:365,"tmin")
+photo$doy <- paste0(1:366,"photo")
 photo <- photo %>% pivot_longer(!doy, names_to = "lat", values_to = "photoperiod") %>% arrange(lat) %>% mutate(lat=as.double(lat))
 photo <- photo %>% pivot_wider(names_from = doy, values_from = photoperiod) 
-#photo.df <- photo %>% full_join(df_sampled[,c(3,4,5,7)]) %>% distinct() %>% relocate(year) %>% relocate(id_site, .after = doy) %>% arrange(id_site,year) %>% relocate(lon, .after = id_site) 
+photo.df <- photo %>% full_join(df_sampled[,c(3,4,5,7)]) %>% distinct() %>% relocate(year,id_site,lon,lat) %>% arrange(id_site,year)
 
-#forcing <- tmin.df %>% inner_join(photo.df)
+forcing <- tmin.df %>% inner_join(photo.df)
 
 ```
 
@@ -425,9 +422,9 @@ for(i in 1:length(sps)) {
                 "location" = t(pheno_sp.sub[index,c("lon","lat")]), 
                 "year" = as.vector(pheno_sp.sub[index,]$year),
                 "Ti" = NULL,
-                "Tmini" = tmin,  #t(pheno_sp.sub[index,paste0(1:366,".x")])
+                "Tmini" = t(pheno_sp.sub[index,paste0(1:366,"tmin")]),
                 "Tmaxi" = NULL,
-                "Li" = photo,
+                "Li" = t(pheno_sp.sub[index,paste0(1:366,"photo")]),
                 "SPEI" = NULL,
                 "VPDi" = NULL,
                 "transition_dates" = as.vector(pheno_sp.sub[index,]$off),
@@ -464,9 +461,9 @@ for(i in 1:2) { #length(species)
   for(site in 1:2) { #length(sites)
     
     # Subset according to id_species_site
-    ts <- paste0(sps[i],"_",sites[site])
+    ts <- paste0(sps[i],"_",sites[site]) #paste0(sites[site],"_",sps[i])
     data.sub <- DataList[[i]][[site]]
-    preds.sub <- preds.df #%>% filter(id_species_site==ts)
+    preds.sub <- preds.df %>% dplyr::filter(id_species_site==ts)
     
     # Initialize sub-dataframes to store results
     DoYoff_Preds.sub <- data.frame(id_species_site=data.sub$site, species=sps[i], year=data.sub$year)
@@ -543,7 +540,7 @@ for(i in 1:2) { #length(species)
     
     ## SIAM model
     optimal_pars <- pr_fit_parameters(par = NULL,
-                                        predictor = preds.sub$DoY_out,
+                                        predictor = preds.sub$on,
                                         data = data.sub,
                                         cost = rmse,
                                         model = "SecondGen_PIA.models",
@@ -557,7 +554,7 @@ for(i in 1:2) { #length(species)
     opt_pars.sub$c_SIAM <- optimal_pars[4]
     opt_pars.sub$d_SIAM <- optimal_pars[5]
     DoYoff_Preds.sub$Pred_DoYoff_SIAM <- pr_predict(par = optimal_pars$par,
-                                                            predictor = preds.sub$DoY_out,
+                                                            predictor = preds.sub$on,
                                                             data = data.sub,
                                                             model = "SecondGen_PIA.models")
     
