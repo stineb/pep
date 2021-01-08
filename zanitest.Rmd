@@ -155,7 +155,7 @@ plot_map_simpl() +
 ## Get forcing data
 
 Re-do this because the longitude and latitude info was not recorded.
-```{r}
+```{r eval=FALSE}
 ddf_watch_zanitest <- ingest(
   siteinfo = df_tseries_sampled %>% 
     rename(sitename = id_species_site) %>% 
@@ -189,8 +189,8 @@ save(ddf_cru_zanitest, file = "data/ddf_cru_zanitest.RData")
 
 Combine the two meteo data frames into one, containing `ccov` (cloud cover) from CRU and all other variables from FLUXNET.
 ```{r}
-# load("data/ddf_watch_zanitest.RData")
-# load("data/ddf_cru_zanitest.RData")
+load("data/ddf_watch_zanitest.RData")
+load("data/ddf_cru_zanitest.RData")
 
 ddf_meteo_zanitest <- ddf_watch_zanitest %>% 
   tidyr::unnest(data) %>% 
@@ -249,7 +249,7 @@ df_soiltexture <- bind_rows(
 
 
 ```{r}  
-df_pmodel_zanitest <- df_zanitest %>% 
+df_pmodel_zanitest <- df_zanitest_sub %>% 
   
   ## nest by site-species (timeseries)
   group_by(id_species_site, lon_mid, lat_mid) %>% 
@@ -273,67 +273,49 @@ df_pmodel_zanitest <- df_zanitest %>%
                                       dplyr::filter(cellname == .y),
                                     params_siml, 
                                      params_modl, 
-                                    df_soiltexture 
+                                    df_soiltexture,
+                                    agg = FALSE
                                   ))) %>% 
   dplyr::select(-data)
 
 save(df_pmodel_zanitest, file = "data/df_pmodel_zanitest.RData")
+
+df_pmodel_zanitest_flat <- df_pmodel_zanitest %>% 
+  unnest(out_pmodel)
+write_csv(df_pmodel_zanitest_flat, path = "data/df_pmodel_zanitest_flat.csv")
+```
+
+Plot example: one species/site/year.
+```{r}
+df_pmodel_zanitest_flat %>% 
+  dplyr::filter(id_species_site == "1142_Fagus sylvatica" & year(date) == 1970) %>% 
+  ggplot(aes(x = date, y = gpp)) +
+  geom_line()
 ```
 
 Compare to LPJ-GUESS from Zani et al.
 ```{r}
-df_comb <- df_pmodel_zanitest %>% 
+agg_out <- function(df){
+  df %>% 
+    group_by(year) %>% 
+    summarise(gpp = sum(gpp), 
+          rd = sum(rd), 
+          apar = sum(apar), 
+          alpha = mean(alpha, na.rm = TRUE))
+}
+
+df_pmodel_zanitest_agg <- df_pmodel_zanitest %>% 
+  mutate(out_pmodel = map(out_pmodel, ~agg_out(.)))
+
+save(df_pmodel_zanitest_agg, file = "data/df_pmodel_zanitest_agg.RData")
+
+df_comb <- df_pmodel_zanitest_agg %>% 
   unnest(out_pmodel) %>% 
-  right_join(df_zanitest, by = c("id_species_site", "year")) %>% 
+  right_join(df_zanitest_sub, by = c("id_species_site", "year")) %>% 
   mutate(gpp_net = gpp - rd)
 
 df_comb %>% analyse_modobs2("cA_tot", "gpp_net", type = "heat")
 ```
-
-
-<!-- Test -->
-<!-- ```{r} -->
-<!-- df_pmodel$out_pmodel[[2]] %>%  -->
-<!--   dplyr::filter(year(date) %in% 1977:1980) %>%  -->
-<!--   # slice(1:1000) %>%  -->
-<!--   ggplot(aes(date, gpp)) +  -->
-<!--   geom_line() -->
-
-<!-- test <- df_pmodel$out_pmodel[[1]] %>%  -->
-<!--   mutate(year = lubridate::year(date)) %>%  -->
-<!--   group_by(year) %>%  -->
-<!--   summarise_if(is.numeric, max, na.rm = TRUE) -->
-
-<!-- plot(test$gpp, type = "l") -->
-<!-- ``` -->
-
-<!-- Weirdly low gpp values! -->
-<!-- ```{r} -->
-<!-- ## xxx debug -->
-<!-- df_pheno = df_pmodel$data[[1]] -->
-<!-- df_forcing = ddf_meteo %>% dplyr::filter(sitename == "icell_1") %>% unnest(data) -->
-<!-- df_siteinfo = df_sites %>% dplyr::filter(sitename == "icell_1") -->
-
-<!-- ## compare to fluxnet data from germany -->
-<!-- load("~/data/rsofun_benchmarking/df_drivers_fluxnet2015.Rdata") -->
-<!-- tmp <- df_drivers_fluxnet2015 %>%  -->
-<!--   dplyr::filter(str_detect(sitename, "DE")) %>%  -->
-<!--   dplyr::select(forcing) %>%  -->
-<!--   unnest(forcing) %>%  -->
-<!--   mutate(prec = prec / (60*60*24), ppfd = ppfd / (60*60*24)) -->
-
-<!-- ggplot() + -->
-<!--   geom_histogram(data = tmp, aes(x = prec, y = ..density..), alpha = 0.5) + -->
-<!--   geom_histogram(data = df_forcing, aes(x = prec, y = ..density..), alpha = 0.5, fill = "red") +  -->
-<!--   xlim(-0.0001, 0.0005) -->
-
-<!-- ggplot() + -->
-<!--   geom_histogram(data = tmp, aes(x = ppfd, y = ..density..), alpha = 0.5) + -->
-<!--   geom_histogram(data = df_forcing, aes(x = ppfd, y = ..density..), alpha = 0.5, fill = "red") -->
-
-<!-- skim(tmp) -->
-<!-- skim(df_forcing) -->
-<!-- ``` -->
 
 
 

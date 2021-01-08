@@ -1,6 +1,6 @@
-run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_siml, params_modl, df_soiltexture){
+run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_siml, params_modl, df_soiltexture, agg = TRUE){
   
-  print(df_pheno[1,])
+  # print(df_pheno[1,])
   
   ## generate fapar time series for this site-species and each year
   useyears <- min(df_pheno$year):max(df_pheno$year)
@@ -83,11 +83,14 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
     mutate(gpp = ifelse(doy >= doy_11h, 0, gpp),
            apar = ifelse(doy >= doy_11h, 0, apar),
            alpha = ifelse(doy >= doy_11h, NA, alpha),
-           rd = ifelse(doy >= doy_11h, 0, rd)) %>% 
+           rd = ifelse(doy >= doy_11h, 0, rd))
   
+  if (agg){
     ## take sum/mean  
-    group_by(year) %>% 
-    summarise(gpp = sum(gpp), rd = sum(rd), apar = sum(apar), alpha = mean(alpha, na.rm = TRUE))
+    df_out <- df_out %>% 
+      group_by(year) %>% 
+      summarise(gpp = sum(gpp), rd = sum(rd), apar = sum(apar), alpha = mean(alpha, na.rm = TRUE))
+  }
   
   return(df_out)
   
