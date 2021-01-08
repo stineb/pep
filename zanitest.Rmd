@@ -1,0 +1,339 @@
+---
+title: "Comparison of modelled photosynthesis in PEP725 simulations"
+author: "Beni Stocker"
+date: "12/2/2020"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(ingestr) # see github of stineb
+library(rbeni)   # see github of stineb
+library(rsofun)  # see github of stineb
+source("R/run_pmodel_pep.R")
+
+do_eval <- TRUE
+```
+
+This is to run models at a few sites and compare results for daily photosynthesis obtained by different models: LPJ implementation by Zani et al., P-model implementation by Constantin and by Beni.
+
+# Data preparation
+
+Read the data complemented with drivers, obtained from Constantin Zohner (7.12.2020).
+```{r}
+df_zanitest <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
+  as_tibble() %>% 
+  rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
+         anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
+         species = Species, s_id = PEP_ID, id_species_site = timeseries) 
+  
+  # ## use the on-water-stressed version of A
+  # mutate(cA_tot = `cA_tot-w`)
+```
+
+
+## Bin data
+
+Bin the data by lon-lat grid points.
+```{r}
+## bin
+dlon <- 2
+dlat <- 2
+lon_breaks <- seq(from = floor(min(df_zanitest$lon)), to = ceiling(max(df_zanitest$lon)), by = dlon)
+lat_breaks <- seq(from = floor(min(df_zanitest$lat)), to = ceiling(max(df_zanitest$lat)), by = dlat)
+
+df_zanitest <- df_zanitest %>%
+  ungroup() %>% 
+  mutate(ilon = cut(lon, 
+                    breaks = lon_breaks
+                    ),
+         ilat = cut(lat, 
+                    breaks = lat_breaks
+                    )
+         ) %>% 
+  mutate(lon_lower = as.numeric( sub("\\((.+),.*", "\\1", ilon)),
+         lon_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilon) ),
+         lat_lower = as.numeric( sub("\\((.+),.*", "\\1", ilat) ),
+         lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) )
+         ) %>% 
+  mutate(lon_mid = (lon_lower + lon_upper)/2,
+         lat_mid = (lat_lower + lat_upper)/2)
+
+df_zanitest <- df_zanitest %>% 
+  group_by(lon_mid, lat_mid) %>% 
+  drop_na(lon_mid, lat_mid)
+
+#save(df_zanitest, file = "data/df_zanitest_corrected.RData")
+```
+
+
+Get all gridcells with at least one site.
+```{r}
+df_zanitest_cells <- df_zanitest %>% 
+  ungroup() %>% 
+  dplyr::select(lon = lon_mid, lat = lat_mid) %>% 
+  distinct() %>% 
+  ungroup() %>% 
+  mutate(year_start = 1979, year_end = 2018) %>% 
+  mutate(lon_mid = lon, lat_mid = lat) %>% 
+  mutate(cellname = paste0("icell_", 1:n()))
+
+save(df_zanitest_cells, file = "data/df_zanitest_cells.RData")
+
+## complement with elevation data
+df_zanitest <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>% 
+  as_tibble() %>% 
+  dplyr::select(s_id, alt, alt_dem, lon, lat) %>% 
+  distinct() %>% 
+  mutate(elv = ifelse(is.na(alt), alt_dem, alt)) %>% 
+  dplyr::select(-alt, -alt_dem) %>% 
+  right_join(df_zanitest, by = c("lon", "lat", "s_id"))
+
+## fill missing elv by mean
+mean_elv <- mean(df_zanitest$elv, na.rm = TRUE)
+df_zanitest <- df_zanitest %>% 
+  rowwise() %>% 
+  mutate(elv = ifelse(is.na(elv), mean_elv, elv)) %>% 
+  ungroup()
+```
+
+Sample one site per gridcell.
+```{r}
+## consider only sites with sufficiently long time series
+df_nyears <- df_zanitest %>% 
+  group_by(id_species_site) %>% 
+  summarise(nyears = n())
+
+df_nyears %>% 
+  ggplot(aes(x = nyears, y = ..count..)) +
+  geom_histogram()
+
+set.seed(1982)
+df_tseries_sampled <- df_zanitest %>% 
+  
+  # ## take only those that cover >20 years
+  # left_join(df_nyears, by = c("id_species_site")) %>% 
+  # dplyr::filter(nyears > 25) %>% 
+  
+  ## sample one site per spatial gridcell (to get good spatial coverage)
+  dplyr::select(id_species_site, lon, lat, elv, lon_mid, lat_mid) %>%
+  distinct() %>%
+  group_by(lon_mid, lat_mid) %>% 
+  sample_n(1) %>% 
+  
+  ## add cell name info
+  left_join(df_zanitest_cells %>% dplyr::select(lon_mid, lat_mid, cellname),
+            by = c("lon_mid", "lat_mid"))
+
+## subset data to sampled time series (33)
+df_zanitest_sub <- df_zanitest %>% 
+  dplyr::filter(id_species_site %in% df_tseries_sampled$id_species_site)
+
+## determine start and end year of sampled t series
+df_tseries_sampled <- df_tseries_sampled %>% 
+  left_join(
+    df_zanitest_sub %>% 
+      group_by(id_species_site) %>% 
+      summarise(year_start = min(year), year_end = max(year)),
+    by = "id_species_site"
+  )
+```
+
+Overview of sampled sites.
+```{r}
+plot_map_simpl() +
+  geom_point(
+    data = df_tseries_sampled, 
+    aes(x = lon, y = lat), 
+    color = "red") +
+  xlim(-10,30) + ylim(30, 60)
+```
+
+
+## Get forcing data
+
+Re-do this because the longitude and latitude info was not recorded.
+```{r}
+ddf_watch_zanitest <- ingest(
+  siteinfo = df_tseries_sampled %>% 
+    rename(sitename = id_species_site) %>% 
+    mutate(year_start_tseries = year_start,
+           year_end_tseries = year_end) %>% 
+    mutate(year_start = max(1979, year_start),
+           year_end = max(1979, year_end)),
+  source    = "watch_wfdei",
+  getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
+  dir       = "~/data/watch_wfdei/"  # adjust this with your local path
+  ) %>% 
+  rename(id_species_site = sitename)
+
+save(ddf_watch_zanitest, file = "data/ddf_watch_zanitest.RData")
+
+ddf_cru_zanitest <- ingest(
+  siteinfo = df_tseries_sampled %>% 
+    rename(sitename = id_species_site) %>% 
+    mutate(year_start_tseries = year_start,
+           year_end_tseries = year_end) %>% 
+    mutate(year_start = max(1979, year_start),
+           year_end = max(1979, year_end)),
+  source    = "cru",
+  getvars   = "ccov",
+  dir       = "~/data/cru/ts_4.01/"  # adjust this with your local path
+  ) %>% 
+  rename(id_species_site = sitename)
+
+save(ddf_cru_zanitest, file = "data/ddf_cru_zanitest.RData")
+```
+
+Combine the two meteo data frames into one, containing `ccov` (cloud cover) from CRU and all other variables from FLUXNET.
+```{r}
+# load("data/ddf_watch_zanitest.RData")
+# load("data/ddf_cru_zanitest.RData")
+
+ddf_meteo_zanitest <- ddf_watch_zanitest %>% 
+  tidyr::unnest(data) %>% 
+  left_join(
+    ddf_cru_zanitest %>% 
+      tidyr::unnest(data),
+    by = c("id_species_site", "date")
+  ) %>% 
+  group_by(id_species_site) %>% 
+  tidyr::nest() %>% 
+  left_join(df_tseries_sampled, by = "id_species_site")
+```
+
+CO2
+```{r}
+df_co2 <- read_csv("~/data/co2/cCO2_rcp85_const850-1765.csv")
+```
+
+## Run model
+
+```{r}
+params_siml <- list(
+  spinup             = TRUE,
+  spinupyears        = 10,
+  recycle            = 1,
+  soilmstress        = TRUE,
+  tempstress         = TRUE,
+  calc_aet_fapar_vpd = FALSE,
+  in_ppfd            = TRUE,
+  in_netrad          = FALSE,
+  outdt              = 1,
+  ltre               = FALSE,
+  ltne               = FALSE,
+  ltrd               = FALSE,
+  ltnd               = FALSE,
+  lgr3               = TRUE,
+  lgn3               = FALSE,
+  lgr4               = FALSE
+	)
+
+## calibrated parameters for v3.0 (see https://rpubs.com/stineb/rsofun_benchmark_v30)
+params_modl <- list(
+	kphio           = 0.09423773,
+	soilm_par_a     = 0.33349283,
+	soilm_par_b     = 1.45602286,
+	vpdstress_par_a = 9999,
+	vpdstress_par_b = 9999,
+	vpdstress_par_m = 9999
+	)
+
+df_soiltexture <- bind_rows(
+  top    = tibble(layer = "top",    fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1),
+  bottom = tibble(layer = "bottom", fsand = 0.4, fclay = 0.3, forg = 0.1, fgravel = 0.1)
+)
+```
+
+
+```{r}  
+df_pmodel_zanitest <- df_zanitest %>% 
+  
+  ## nest by site-species (timeseries)
+  group_by(id_species_site, lon_mid, lat_mid) %>% 
+  nest() %>% 
+  
+  ## add id_cell column
+  left_join(df_zanitest_cells %>%   # this must contain the same info for 'sitename' as is used for creating forcing dataset
+              dplyr::select(-lon, -lat),
+            by = c("lon_mid", "lat_mid")) %>% 
+  ungroup() %>% 
+  
+  ## run p-model
+  mutate(out_pmodel = purrr::map2(data, cellname, 
+                                  ~run_pmodel_pep(
+                                    .x,
+                                    ddf_meteo_zanitest %>% 
+                                      dplyr::filter(cellname == .y) %>% 
+                                      unnest(data),
+                                    df_co2,
+                                    df_tseries_sampled %>% 
+                                      dplyr::filter(cellname == .y),
+                                    params_siml, 
+                                     params_modl, 
+                                    df_soiltexture 
+                                  ))) %>% 
+  dplyr::select(-data)
+
+save(df_pmodel_zanitest, file = "data/df_pmodel_zanitest.RData")
+```
+
+Compare to LPJ-GUESS from Zani et al.
+```{r}
+df_comb <- df_pmodel_zanitest %>% 
+  unnest(out_pmodel) %>% 
+  right_join(df_zanitest, by = c("id_species_site", "year")) %>% 
+  mutate(gpp_net = gpp - rd)
+
+df_comb %>% analyse_modobs2("cA_tot", "gpp_net", type = "heat")
+```
+
+
+<!-- Test -->
+<!-- ```{r} -->
+<!-- df_pmodel$out_pmodel[[2]] %>%  -->
+<!--   dplyr::filter(year(date) %in% 1977:1980) %>%  -->
+<!--   # slice(1:1000) %>%  -->
+<!--   ggplot(aes(date, gpp)) +  -->
+<!--   geom_line() -->
+
+<!-- test <- df_pmodel$out_pmodel[[1]] %>%  -->
+<!--   mutate(year = lubridate::year(date)) %>%  -->
+<!--   group_by(year) %>%  -->
+<!--   summarise_if(is.numeric, max, na.rm = TRUE) -->
+
+<!-- plot(test$gpp, type = "l") -->
+<!-- ``` -->
+
+<!-- Weirdly low gpp values! -->
+<!-- ```{r} -->
+<!-- ## xxx debug -->
+<!-- df_pheno = df_pmodel$data[[1]] -->
+<!-- df_forcing = ddf_meteo %>% dplyr::filter(sitename == "icell_1") %>% unnest(data) -->
+<!-- df_siteinfo = df_sites %>% dplyr::filter(sitename == "icell_1") -->
+
+<!-- ## compare to fluxnet data from germany -->
+<!-- load("~/data/rsofun_benchmarking/df_drivers_fluxnet2015.Rdata") -->
+<!-- tmp <- df_drivers_fluxnet2015 %>%  -->
+<!--   dplyr::filter(str_detect(sitename, "DE")) %>%  -->
+<!--   dplyr::select(forcing) %>%  -->
+<!--   unnest(forcing) %>%  -->
+<!--   mutate(prec = prec / (60*60*24), ppfd = ppfd / (60*60*24)) -->
+
+<!-- ggplot() + -->
+<!--   geom_histogram(data = tmp, aes(x = prec, y = ..density..), alpha = 0.5) + -->
+<!--   geom_histogram(data = df_forcing, aes(x = prec, y = ..density..), alpha = 0.5, fill = "red") +  -->
+<!--   xlim(-0.0001, 0.0005) -->
+
+<!-- ggplot() + -->
+<!--   geom_histogram(data = tmp, aes(x = ppfd, y = ..density..), alpha = 0.5) + -->
+<!--   geom_histogram(data = df_forcing, aes(x = ppfd, y = ..density..), alpha = 0.5, fill = "red") -->
+
+<!-- skim(tmp) -->
+<!-- skim(df_forcing) -->
+<!-- ``` -->
+
+
+
