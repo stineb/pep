@@ -271,7 +271,6 @@ df_co2 <- read_csv("~/data/co2/cCO2_rcp85_const850-1765.csv")
 ```
 
 ## Run model
->>>>>>> 8cced2925526d4ee9500ecd6f1b082344bf12401
 
 ```{r}
 params_siml <- list(

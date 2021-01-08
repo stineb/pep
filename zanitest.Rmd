@@ -33,6 +33,23 @@ df_zanitest <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_
   # mutate(cA_tot = `cA_tot-w`)
 ```
 
+Complement with elevation data
+```{r echo=TRUE, warning=FALSE, message=FALSE}
+df_zanitest <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>% 
+  as_tibble() %>% 
+  dplyr::select(s_id, alt, alt_dem, lon, lat) %>% 
+  distinct() %>% 
+  mutate(elv = ifelse(is.na(alt), alt_dem, alt)) %>% 
+  dplyr::select(-alt, -alt_dem) %>% 
+  right_join(df_zanitest, by = c("lon", "lat", "s_id"))
+
+## fill missing elv by mean
+mean_elv <- mean(df_zanitest$elv, na.rm = TRUE)
+df_zanitest <- df_zanitest %>% 
+  rowwise() %>% 
+  mutate(elv = ifelse(is.na(elv), mean_elv, elv)) %>% 
+  ungroup()
+```
 
 ## Bin data
 
@@ -65,38 +82,31 @@ df_zanitest <- df_zanitest %>%
   group_by(lon_mid, lat_mid) %>% 
   drop_na(lon_mid, lat_mid)
 
-#save(df_zanitest, file = "data/df_zanitest_corrected.RData")
-```
+## bin to half-degree gridcells for determining climate forcing
+dlon <- 0.5
+dlat <- 0.5
+lon_breaks <- seq(from = floor(min(df_zanitest$lon)), to = ceiling(max(df_zanitest$lon)), by = dlon)
+lat_breaks <- seq(from = floor(min(df_zanitest$lat)), to = ceiling(max(df_zanitest$lat)), by = dlat)
 
-
-Get all gridcells with at least one site.
-```{r echo=TRUE, warning=FALSE, message=FALSE}
-df_zanitest_cells <- df_zanitest %>% 
+df_zanitest <- df_zanitest %>%
   ungroup() %>% 
-  dplyr::select(lon = lon_mid, lat = lat_mid) %>% 
-  distinct() %>% 
-  ungroup() %>% 
-  mutate(year_start = 1979, year_end = 2018) %>% 
-  mutate(lon_mid = lon, lat_mid = lat) %>% 
-  mutate(cellname = paste0("icell_", 1:n()))
-
-save(df_zanitest_cells, file = "data/df_zanitest_cells.RData")
-
-## complement with elevation data
-df_zanitest <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>% 
-  as_tibble() %>% 
-  dplyr::select(s_id, alt, alt_dem, lon, lat) %>% 
-  distinct() %>% 
-  mutate(elv = ifelse(is.na(alt), alt_dem, alt)) %>% 
-  dplyr::select(-alt, -alt_dem) %>% 
-  right_join(df_zanitest, by = c("lon", "lat", "s_id"))
-
-## fill missing elv by mean
-mean_elv <- mean(df_zanitest$elv, na.rm = TRUE)
-df_zanitest <- df_zanitest %>% 
-  rowwise() %>% 
-  mutate(elv = ifelse(is.na(elv), mean_elv, elv)) %>% 
-  ungroup()
+  mutate(ilon = cut(lon, 
+                    breaks = lon_breaks
+                    ),
+         ilat = cut(lat, 
+                    breaks = lat_breaks
+                    )
+         ) %>% 
+  mutate(lon_lower = as.numeric( sub("\\((.+),.*", "\\1", ilon)),
+         lon_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilon) ),
+         lat_lower = as.numeric( sub("\\((.+),.*", "\\1", ilat) ),
+         lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) )
+         ) %>% 
+  mutate(lon_mid_halfdeg = (lon_lower + lon_upper)/2,
+         lat_mid_halfdeg = (lat_lower + lat_upper)/2) %>% 
+  
+  ## create cell name to associate with climate input
+  mutate(cellname = paste0("icell_", as.character(lon_mid_halfdeg), "_", as.character(lat_mid_halfdeg)))
 ```
 
 Sample one site per gridcell.
@@ -113,25 +123,24 @@ df_nyears %>%
 set.seed(1982)
 df_tseries_sampled <- df_zanitest %>% 
   
-  ## take only those that cover >20 years
-  left_join(df_nyears, by = c("id_species_site")) %>%
-  dplyr::filter(nyears > 25) %>%
+  # ## take only those that cover >20 years
+  # left_join(df_nyears, by = c("id_species_site")) %>%
+  # dplyr::filter(nyears > 62) %>%  # chosen to get sufficiently small sample
   
   ## sample one site per spatial gridcell (to get good spatial coverage)
-  dplyr::select(id_species_site, lon, lat, elv, lon_mid, lat_mid) %>%
+  dplyr::select(id_species_site, lon, lat, elv, lon_mid, lat_mid, lon_mid_halfdeg, lat_mid_halfdeg) %>%
   distinct() %>%
   group_by(lon_mid, lat_mid) %>% 
   sample_n(1) %>% 
   
-  ## add cell name info
-  left_join(df_zanitest_cells %>% dplyr::select(lon_mid, lat_mid, cellname),
-            by = c("lon_mid", "lat_mid"))
+  ## create cell name to associate with climate input
+  mutate(cellname = paste0("icell_", as.character(lon_mid_halfdeg), "_", as.character(lat_mid_halfdeg)))
 
 ## subset data to sampled time series (33)
 df_zanitest_sub <- df_zanitest %>% 
   dplyr::filter(id_species_site %in% df_tseries_sampled$id_species_site)
 
-## determine start and end year of sampled t series
+## determine start and end year of sampled tseries
 df_tseries_sampled <- df_tseries_sampled %>% 
   left_join(
     df_zanitest_sub %>% 
@@ -150,6 +159,21 @@ plot_map_simpl() +
     color = "red") +
   xlim(-10,30) + ylim(30, 60)
 ```
+
+<!-- Get all half-degree gridcells with at least one site for downloading climate forcing -->
+<!-- ```{r echo=TRUE, warning=FALSE, message=FALSE} -->
+<!-- df_zanitest_cells <- df_zanitest_sub %>% -->
+<!--   ungroup() %>% -->
+<!--   dplyr::select(lon_mid_halfdeg, lat_mid_halfdeg) %>% -->
+<!--   distinct() %>% -->
+<!--   ungroup() %>% -->
+<!--   mutate(year_start = 1979, year_end = 2018) %>% -->
+<!--   mutate(cellname = paste0("icell_", as.character(lon_mid_halfdeg), "_", as.character(lat_mid_halfdeg))) %>%  -->
+<!--   left_join() -->
+
+<!-- save(df_zanitest_cells, file = "data/df_zanitest_cells.RData") -->
+<!-- ``` -->
+
 
 
 ## Get forcing data
@@ -252,13 +276,8 @@ df_soiltexture <- bind_rows(
 df_pmodel_zanitest <- df_zanitest_sub %>% 
   
   ## nest by site-species (timeseries)
-  group_by(id_species_site, lon_mid, lat_mid) %>% 
+  group_by(id_species_site, cellname) %>% 
   nest() %>% 
-  
-  ## add id_cell column
-  left_join(df_zanitest_cells %>%   # this must contain the same info for 'sitename' as is used for creating forcing dataset
-              dplyr::select(-lon, -lat),
-            by = c("lon_mid", "lat_mid")) %>% 
   ungroup() %>% 
   
   ## run p-model
@@ -272,7 +291,7 @@ df_pmodel_zanitest <- df_zanitest_sub %>%
                                     df_tseries_sampled %>% 
                                       dplyr::filter(cellname == .y),
                                     params_siml, 
-                                     params_modl, 
+                                    params_modl, 
                                     df_soiltexture,
                                     agg = FALSE
                                   ))) %>% 
