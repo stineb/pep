@@ -97,7 +97,8 @@ df_soiltexture <- bind_rows(
 )
 
 ## get all available cores
-ncores <- parallel::detectCores()
+# ncores <- parallel::detectCores()
+ncores <- 1
 
 ##----------------------------------------
 ## MINE
@@ -157,12 +158,10 @@ if (ncores > 1){
     nest() %>% 
     
     ## add id_cell column
-    left_join(df_mine_cells %>% 
+    left_join(df_mine_cells %>%
                 dplyr::select(-lon, -lat),
               by = c("lon_mid", "lat_mid")) %>% 
     ungroup() %>% 
-    
-    slice(1) %>% 
     
     ## run p-model
     mutate(out_pmodel = purrr::map2(data, sitename, 
