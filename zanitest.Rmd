@@ -309,7 +309,7 @@ Check: am I using the right forcing for the respective time series? Let's take t
 df_zanitest_sub %>% 
   dplyr::filter(id_species_site == "1359_Quercus robur") %>% 
   slice(1) %>% 
-  dplyr::select(s_id, lon, lat, elv, id_species_site, year, off, on)
+  dplyr::select(s_id, lon, lat, elv, id_species_site, year, off, on, cellname)
 ```
 
 It is forced with the following data:
@@ -317,17 +317,11 @@ It is forced with the following data:
 df_zanitest_sub %>% 
   
   ## nest by site-species (timeseries)
-  group_by(id_species_site, lon_mid, lat_mid) %>% 
+  group_by(id_species_site, cellname) %>% 
   nest() %>% 
-  
-  ## add id_cell column
-  left_join(df_zanitest_cells %>%   # this must contain the same info for 'sitename' as is used for creating forcing dataset
-              dplyr::select(-lon, -lat),
-            by = c("lon_mid", "lat_mid")) %>% 
   ungroup() %>% 
   dplyr::filter(id_species_site == "1359_Quercus robur")
 ```
-
 
 Plot example: one species/site/year.
 ```{r echo=TRUE, warning=FALSE, message=FALSE, warning=FALSE}
