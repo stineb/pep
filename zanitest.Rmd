@@ -360,4 +360,35 @@ df_comb %>% analyse_modobs2("cA_tot", "gpp_net", type = "heat")
 ```
 
 
+## Daily outputs comparison
+
+Load daily LPJ outputs obtained by Constantin.
+```{r}
+ddf_lpj_zani <- data.table::fread("data/daily_photosynthesis_data_lpj_output_zani.csv")
+
+# make it long
+ddf_lpj_zani_long <- ddf_lpj_zani %>% 
+  pivot_longer(cols = c(6:371), names_to = "doy", values_to = "gpp", names_prefix = "V")
+
+# save
+save(ddf_lpj_zani_long, file = "data/ddf_lpj_zani_long.RData")
+```
+
+Look at mean seasonality
+```{r}
+df_meandoy_test <- ddf_zani%>% 
+  mutate(doy = as.numeric(doy)) %>% 
+  dplyr::filter(pep_id == 2429) %>% 
+  group_by(doy) %>% 
+  summarise(gpp = mean(gpp, na.rm = TRUE))
+
+df_meandoy_test %>% 
+  ggplot(aes(doy, gpp)) + 
+  geom_line()
+
+  mutate(date = ymd(paste0(as.character(year), "-01-01"))) %>% 
+  mutate(date = date + days(doy-1))
+
+```
+
 
