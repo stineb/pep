@@ -33,6 +33,13 @@ df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") 
   
   ## use the on-water-stressed version of A
   mutate(cA_tot = `cA_tot-w`)
+
+# ## test
+# tmp <- df %>% 
+#   dplyr::select(id_site, id_species_site) %>% 
+#   group_by(id_site) %>% 
+#   nest() %>% 
+#   mutate(data = map(data, ~distinct(.)))
 ```
 
 Taking uncorrected Zani
@@ -723,6 +730,248 @@ r.squaredGLMM(Fit_bySps_gpp_net)
 ```
 There is still a negative relationship between EOS and A, but not with GPP from P-model.
 
+# Re-calculated Zani-GPP, Zani sites
+
+## Data loading and cleaning
+
+Re-calculated from daily outputs sent by Constantin 5.3.2021. This file is produced in `zanitest.Rmd`
+```{r}
+rm("df_orig")
+rm("df_orig_wide")
+
+## GPP
+df_lpj <- read_csv("data/daily_GPP_data_20210305.csv") %>% 
+  pivot_longer(cols = 6:ncol(.), names_to = "doy", names_prefix = "V", values_to = "gpp_lpj") %>%
+  mutate(doy = as.integer(doy)) %>%
+  mutate(date = lubridate::ymd(paste0(as.character(year), "-01-01")) + lubridate::days(doy-1))
+save(df_lpj, file = "data/df_lpj.RData")
+rm("df_lpj")
+
+## Rd
+df_lpj_rd <- read_csv("data/daily_Rd_data_20210305.csv") %>% 
+  pivot_longer(cols = 6:ncol(.), names_to = "doy", names_prefix = "V", values_to = "rd_lpj") %>%
+  mutate(doy = as.integer(doy)) %>%
+  mutate(date = lubridate::ymd(paste0(as.character(year), "-01-01")) + lubridate::days(doy-1))
+save(df_lpj_rd, file = "data/df_lpj_rd.RData")
+load("data/df_lpj.RData")
+
+df_lpj <- df_lpj %>% 
+  dplyr::select(pep_id, lat, date, gpp_lpj) %>% 
+  left_join(df_lpj_rd %>% 
+              dplyr::select(pep_id, date, rd_lpj),
+            by = c("date", "pep_id")
+            ) %>% 
+  mutate(gpp_lpj_net = gpp_lpj - rd_lpj, year = lubridate::year(date), doy = lubridate::yday(date)) %>% 
+  mutate(dayl = geosphere::daylength(lat = lat, doy = doy))
+
+save(df_lpj, file = "data/df_lpj.RData")
+rm("df_lpj_rd")
+
+
+df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
+  as_tibble() %>% 
+  select(year = YEAR, off = DoY_off, on = DoY_out, 
+         species = Species, pep_id = PEP_ID, id_species_site = timeseries)
+
+## aggregate to annual
+tmp <- df %>% 
+  group_by(pep_id) %>% 
+  nest()
+
+agg_by_pep <- function(use_pep_id, df, df_lpj){
+  
+  df_lpj %>% 
+    ungroup() %>% 
+    dplyr::filter(pep_id == use_pep_id) %>% 
+    full_join(df,
+              by = c("year"))
+    
+  
+}
+
+  ## set gpp to zero after day length = 11 h
+  mutate(gpp_lpj = ifelse(dayl < 11 & doy > lubridate::yday("21-06-2001"), 0, gpp_lpj),
+         gpp_lpj_net = ifelse(dayl < 11 & doy > lubridate::yday("21-06-2001"), 0, gpp_lpj_net)) %>% 
+  
+  ## set gpp before leaf onset to zero
+  mutate(gpp_lpj = ifelse(doy < on, 0, gpp_lpj),
+         gpp_lpj_net = ifelse(doy < on, 0, gpp_lpj_net)) %>% 
+  
+  group_by(year, pep_id) %>% 
+  summarise(gpp_lpj = sum(gpp_lpj, na.rm = TRUE), gpp_lpj_net = sum(gpp_lpj_net, na.rm = TRUE))
+
+df_anl <- 
+```
+
+## IAV
+
+Interannual temporal variation with LMMs
+```{r}
+# Both models are equivalent
+Fit_IAV_cA_tot = lmer(off ~ cA_tot + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+summary(Fit_IAV_cA_tot)
+r.squaredGLMM(Fit_IAV_cA_tot)
+plot(allEffects(Fit_IAV_cA_tot))
+```
+
+We can re-create Fig. 1A in Zani et al. This shows correlation of points, pooling data from all species, and after "removing" the random factor 'site'. This essentially removes the spatial variation! This uses code adopted from `ModelAnalyses_1_Correlation&PathAnalyses_Figures1.R`.
+```{r}
+remove_randomfactor <- function(df){
+
+  # fit model
+  f1 <- lmer(off ~ cA_tot + (1|id_site), data = df)
+
+  # Predict the data, removing the grouping value
+  fix.pred1 <- predict(f1, re.form = NA)
+
+  # To remove the random effects term and view the original spread of the data
+  # with just the random noise added, add the residual error back
+  # onto the predicted values
+  y.adj1 <- fix.pred1 + resid(f1)
+
+  # Store results
+  df$off_norandom <- y.adj1
+
+  return(df)
+}
+
+df_anl <- df_anl %>%
+  group_by(species) %>%
+  nest() %>%
+  mutate(data = map(data, ~remove_randomfactor(.))) %>%
+  unnest(data)
+
+out <- df_anl %>%
+  analyse_modobs2("cA_tot", "off_norandom", type = "heat")
+out$gg +
+  coord_cartesian(ylim = c(200,350))
+```
+
+
+## Long-term
+
+Separating the temporal trends from the relationship with A using LMMs. Without interactions between A and year.
+```{r}
+# cA_tot: Interaction scale(cA_tot):scale(year) is significant and positive.
+Fit_LT_cA_tot = lmer(off ~ scale(cA_tot) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT_cA_tot) 
+plot(allEffects(Fit_LT_cA_tot))
+
+# # cGSI
+# Fit_LT_cGSI = lmer(off ~ scale(cGSI) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+# summary(Fit_LT_cGSI) 
+# plot(allEffects(Fit_LT_cGSI))
+
+```
+
+Get correlation between on and off for withing species-sites => long-term temporal variation (5 bins).
+```{r eval=do_eval}
+df_temporal_longterm_sitepecies <- df_anl %>%
+  mutate(yearbin = cut(year, breaks = 5, labels = FALSE)) %>%
+  group_by(id_site, species, yearbin) %>%
+  summarise(cA_tot = mean(cA_tot, na.rm = TRUE), off = mean(off, na.rm = TRUE)) %>%
+  ungroup()
+```
+
+Longer-term temporal variation with LMMs
+```{r}
+# Both models are equivalent
+Fit_IAV_cA_tot_lt = lmer(off ~ cA_tot + (1|id_site) + (1|species) , 
+                      data = df_temporal_longterm_sitepecies, 
+                      na.action = "na.exclude"
+                      )
+summary(Fit_IAV_cA_tot_lt)
+r.squaredGLMM(Fit_IAV_cA_tot_lt)
+plot(allEffects(Fit_IAV_cA_tot_lt))
+```
+
+<!-- Fit individual regressions for each species and site -->
+<!-- ```{r} -->
+<!-- df_temporal_longterm_sitepecies <- df_temporal_longterm_sitepecies %>%  -->
+<!--   group_by(id_species_site) %>% -->
+<!--   nest() %>% -->
+<!--   mutate(linmod = purrr::map(data, ~lm(off ~ cA_tot, data = .))) %>% -->
+<!--   mutate(summ = purrr::map(linmod, ~summary(.))) %>% -->
+<!--   mutate(df_coef = purrr::map(linmod, ~tidy(.))) %>% -->
+<!--   mutate(coef_cA_tot = purrr::map_dbl(df_coef, ~get_coef_cA_tot(.))) %>% -->
+<!--   mutate(p_value_cA_tot = purrr::map_dbl(df_coef, ~get_p_cA_tot(.))) %>% -->
+<!--   dplyr::select(-linmod) %>% -->
+<!--   mutate(rsq = purrr::map_dbl(summ, "r.squared"), -->
+<!--          adj_rsq = purrr::map_dbl(summ, "adj.r.squared")) %>% -->
+<!--   dplyr::select(-summ) -->
+
+<!-- save(df_temporal_longterm_sitepecies, file = "data/df_temporal_longterm_sitepecies.RData") -->
+<!-- ``` -->
+
+<!-- Plot density of coefs -->
+<!-- ```{r} -->
+<!-- load("data/df_temporal_longterm_sitepecies.RData") -->
+<!-- df_temporal_longterm_sitepecies %>% -->
+<!--   ggplot(aes(coef_cA_tot, ..density..)) + -->
+<!--   geom_histogram() + -->
+<!--   xlim(-1,1) + -->
+<!--   geom_vline(xintercept = 0, linetype = "dotted") + -->
+<!--   geom_vline(xintercept = median(df_temporal_longterm$coef_cA_tot, na.rm = TRUE), color = "red", linetype = "dashed") -->
+<!-- ``` -->
+
+
+
+## Anomalies
+
+Let's try to separate annual anomalies and site-level mean (of years 1970-2000).
+```{r}
+separate_anom <- function(df){
+  df_mean <- df %>% 
+    dplyr::filter(year %in% 1970:2000) %>% 
+    summarise(mean_off = mean(off, na.rm = TRUE), 
+              mean_cA_tot = mean(cA_tot, na.rm = TRUE),
+              mean_cGSI = mean(cGSI, na.rm = TRUE))
+  df %>% 
+    mutate(mean_cA_tot = df_mean$mean_cA_tot,
+           anom_cA_tot = cA_tot - df_mean$mean_cA_tot
+           # mean_cGSI = df_mean$mean_cGSI,
+           # anom_cGSI = cGSI - df_mean$mean_cGSI,           
+           )
+}
+df_anl <- df_anl %>% 
+  group_by(id_species_site) %>% 
+  nest() %>% 
+  mutate(data = map(data, ~separate_anom(.))) %>% 
+  unnest(data)
+
+## cA_tot
+Fit_LT_anom = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(Fit_LT_anom)
+plot(allEffects(Fit_LT_anom))
+r.squaredGLMM(Fit_LT_anom)
+
+# ## cGSI
+# Fit_LT_anom = lmer(off ~ scale(mean_cGSI) + scale(anom_cGSI) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+# summary(Fit_LT_anom)
+# plot(allEffects(Fit_LT_anom))
+# r.squaredGLMM(Fit_LT_anom)
+
+```
+Whatever I do, there is always this weird negative relationship between A and EOS at the spatial (between-site) scale.
+
+
+## Spatial by species
+
+Aggregate years, to get a "spatial" data frame, distinguishing species.
+```{r}
+df_spatial_sps <- df_anl %>% 
+  group_by(id_site, species) %>% 
+  summarise(cA_tot = mean(cA_tot, na.rm = TRUE), 
+            off = mean(off, na.rm = TRUE)
+            # cGSI = mean(cGSI, na.rm = TRUE)
+            )
+
+Fit_bySps_cA_tot = lmer(off ~ cA_tot + (1|species), data = df_spatial_sps, na.action = "na.exclude")
+summary(Fit_bySps_cA_tot)
+plot(allEffects(Fit_bySps_cA_tot))
+r.squaredGLMM(Fit_bySps_cA_tot)
+```
+There is still a negative relationship between EOS and A, but not with GPP from P-model.
 
 
 
