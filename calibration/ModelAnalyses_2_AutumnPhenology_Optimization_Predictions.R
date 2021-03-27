@@ -503,7 +503,7 @@ for(sp in 1:length(species)) {
     opt_pars.sub$Pbase_TPDM <- optimal_pars[1]   #xxx? optimal_pars$par[1]
     opt_pars.sub$a_TPDM <- optimal_pars[2]       #xxx? optimal_pars$par[2]
     opt_pars.sub$b_TPDM <- optimal_pars[3]       #xxx? optimal_pars$par[3]
-    opt_pars.sub$c_TDPM <- optimal_pars[4]       #xxx? optimal_pars$par[4]
+    opt_pars.sub$c_TDPM <- optimal_pars[4]       #xxx? optimal_pars$par[4] #xxx? c_TPDM
     opt_pars.sub$d_TPDM <- optimal_pars[5]       #xxx? optimal_pars$par[5]
     opt_pars.sub$e_TPDM <- optimal_pars[6]       #xxx? optimal_pars$par[6]
     DoYoff_Preds.sub$Pred_DoYoff_TPDM <- estimate_phenology(par = optimal_pars$par,
