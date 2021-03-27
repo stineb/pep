@@ -20,9 +20,9 @@ library(ggpubr)
 
 ### Load subset of data for the example
 ```{r,include=FALSE,eval=TRUE}
-load("~/pep/calibration/data/datalist_example.RData")
-preds.df <- read.csv("~/pep/calibration/data/preds.df_example.csv",sep=";")
-df_tseries_id <- read.csv("~/pep/calibration/data/df_tseries_id_example.csv",sep=";")
+load("data/datalist_example.RData")
+preds.df <- read.csv("data/preds.df_example.csv",sep=";")
+df_tseries_id <- read.csv("data/df_tseries_id_example.csv",sep=";")
 ```
 
 ### Define the models (copy and paste from Zani et al. 2020)
@@ -257,18 +257,18 @@ DoYoff_Preds.sub$`Preds_AnomDoYoff_PIA+` <- DoYoff_Preds.sub$`Pred_DoYoff_PIA+` 
 DoYoff_Preds.df <- DoYoff_Preds.sub
 opt_pars.df <- opt_pars.sub
 
-save(DoYoff_Preds.df, file = "~/pep/calibration/output/DoYoff_Preds.df_1_Fagus_sylvatica.RData")
-save(opt_pars.df, file = "~/pep/calibration/output/opt_pars.df_1_Fagus_sylvatica.RData")
+save(DoYoff_Preds.df, file = "output/DoYoff_Preds.df_1_Fagus_sylvatica.RData")
+save(opt_pars.df, file = "output/opt_pars.df_1_Fagus_sylvatica.RData")
 ```
 
 ### FIGURE 3A Observed (Obs_AnomDoYoff) vs.Predicted (Pred_AnomDoYoff) for a timeseries
 
-#### Observed versus predicted autumn senescence dates for a timeseries (Site 1 - Fagus sylvatica) calibration.
+Observed versus predicted autumn senescence dates for a timeseries (Site 1 - Fagus sylvatica) calibration.
 
 ```{r,include=FALSE, eval=TRUE}
 
 # Loading calibration outputs for one timeseries
-load("~/pep/calibration/output/DoYoff_Preds.df_1_Fagus_sylvatica.RData")
+load("output/DoYoff_Preds.df_1_Fagus_sylvatica.RData")
 DoYoff_Preds.df_site_species <- DoYoff_Preds.df
 
 PlotTPM <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = Preds_AnomDoYoff_TPM, y = Obs_AnomDoYoff)) + geom_point() + 
@@ -288,12 +288,12 @@ ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 
 ```
 
-#### Observed versus predicted autumn senescence dates for a timeseries (Site 1 - Fagus sylvatica) calibration from Zani et al. repository in Zenodo.
+Observed versus predicted autumn senescence dates for a timeseries (Site 1 - Fagus sylvatica) calibration from Zani et al. repository in Zenodo.
 
 ```{r,include=FALSE, eval=TRUE}
 
 # Reading sample outputs from Zani et al. for predictions
-pred_DoYoff <- data.table::fread("~/pep/calibration/output/ModelAnalysis_1_Predicted_DoYoff_subset.csv") 
+pred_DoYoff <- data.table::fread("output/ModelAnalysis_1_Predicted_DoYoff_subset.csv") 
 subsetPred_1 <- subset(pred_DoYoff, timeseries=="1_Fagus sylvatica")
 
 PlotTPM <- ggplot(data = subsetPred_1, aes(x = Pred_AnomDoYoff_TPM, y = Obs_AnomDoYoff)) + geom_point() + 
@@ -419,8 +419,8 @@ DoYoff_Preds.sub$`Preds_AnomDoYoff_PIA+` <- DoYoff_Preds.sub$`Pred_DoYoff_PIA+` 
 DoYoff_Preds.df <- DoYoff_Preds.sub
 opt_pars.df <- opt_pars.sub
 
-save(DoYoff_Preds.df, file = "~/pep/calibration/output/DoYoff_Preds.df_1_Quercus_robur.RData")
-save(opt_pars.df, file = "~/pep/calibration/output/opt_pars.df_1_Quercus_robur.RData")
+save(DoYoff_Preds.df, file = "output/DoYoff_Preds.df_1_Quercus_robur.RData")
+save(opt_pars.df, file = "output/opt_pars.df_1_Quercus_robur.RData")
 ```
 
 ### FIGURE 3A Observed (Obs_AnomDoYoff) vs.Predicted (Pred_AnomDoYoff) for a timeseries
@@ -430,7 +430,7 @@ save(opt_pars.df, file = "~/pep/calibration/output/opt_pars.df_1_Quercus_robur.R
 ```{r,include=FALSE, eval=TRUE}
 
 # Loading calibration outputs for one timeseries
-load("~/pep/calibration/output/DoYoff_Preds.df_1_Quercus_robur.RData")
+load("output/DoYoff_Preds.df_1_Quercus_robur.RData")
 DoYoff_Preds.df_site_species <- DoYoff_Preds.df
 
 PlotTPM <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = Preds_AnomDoYoff_TPM, y = Obs_AnomDoYoff)) + geom_point() + 
@@ -450,12 +450,12 @@ ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 
 ```
 
-#### Observed versus predicted autumn senescence dates for a timeseries (Site 1 - Quercus robur) calibration from Zani et al. repository in Zenodo.
+Observed versus predicted autumn senescence dates for a timeseries (Site 1 - Quercus robur) calibration from Zani et al. repository in Zenodo.
 
 ```{r,include=FALSE, eval=TRUE}
 
 # Reading sample outputs from Zani et al. for predictions
-pred_DoYoff <- data.table::fread("~/pep/calibration/output/ModelAnalysis_1_Predicted_DoYoff_subset.csv") 
+pred_DoYoff <- data.table::fread("output/ModelAnalysis_1_Predicted_DoYoff_subset.csv") 
 subsetPred_2 <- subset(pred_DoYoff, timeseries=="1_Quercus robur")
 
 PlotTPM <- ggplot(data = subsetPred_2, aes(x = Pred_AnomDoYoff_TPM, y = Obs_AnomDoYoff)) + geom_point() + 
