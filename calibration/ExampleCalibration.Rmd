@@ -20,15 +20,16 @@ library(ggpubr)
 
 ## Create datalist
 
-### Read drivers provided by Constantin
+Read drivers provided by Constantin
 ```{r, include=FALSE, eval=FALSE}
-all.df <- data.table::fread("~/pep725/data/DataMeta_3_Drivers_20_11_10.csv") # Data from Constantin
+# all.df <- data.table::fread("~/pep725/data/DataMeta_3_Drivers_20_11_10.csv") # Data from Constantin
+all.df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") # Data from Constantin
 all.df <- all.df %>% unite("ts_yr", c("PEP_ID", "YEAR"), remove = FALSE) %>% rename(cA_totw='cA_tot-w')
 all.df <- all.df %>% mutate_at("id", str_replace, " ", "_") %>% mutate_at("timeseries", str_replace, " ", "_") %>% mutate_at("Species", str_replace, " ", "_")
 length(unique(all.df$PEP_ID))
 ```
 
-### Define phenological observations and predictors
+Define phenological observations and predictors
 
 ```{r, include=FALSE, eval=FALSE}
 pheno.df <- all.df %>% dplyr::select("timeseries","ts_yr","PEP_ID","LON","LAT","Species","YEAR","DoY_off","DoY_out")
@@ -36,16 +37,17 @@ pheno.df <- all.df %>% dplyr::select("timeseries","ts_yr","PEP_ID","LON","LAT","
 preds.df <- all.df %>% dplyr::select("timeseries","ts_yr","PEP_ID","LON","LAT","Species","YEAR","DoY_out","temp_GS","RD_summer","cGSI","cA_tot","cA_totw")
 ```
 
-### Read/Calculate minimum temperature and photoperiod
+Read/Calculate minimum temperature and photoperiod
 
 ```{r, include=FALSE, eval=FALSE}
 # Minimum temperature
-tmin.df <- data.table::fread("~/pep725/data/MinimumTemperature.csv") # Data from Michael
+# tmin.df <- data.table::fread("~/pep725/data/MinimumTemperature.csv") # Data from Michael
+tmin.df <- data.table::fread("~/pep/data/MinimumTemperature.csv") # Data from Michael
 length(unique(tmin.df$PEP_ID))
 ```
 
 ```{r, include=FALSE, eval=FALSE}
-photo.df <- data.table::fread("~/pep725/data/Photoperiod_daylength.csv") # Data from daylength
+photo.df <- data.table::fread("~/pep/data/Photoperiod_daylength.csv") # Data from daylength
 photo.df$ts_yr <- paste0(photo.df$PEP_ID,"_",photo.df$YEAR)
 length(unique(photo.df$PEP_ID))
 ```
@@ -69,7 +71,7 @@ length(unique(photo$PEP_ID))
 #write.table(photo,"~/data/pep/calib/Photoperiod_daylength.csv",sep=";",row.names = F)
 ```
 
-### Create datalist by site and species (timeseries)
+Create datalist by site and species (timeseries)
 ```{r, include=FALSE, eval=FALSE}
 # Define model names
 models   <- c("CDD","DM1","DM2","TPM","SIAM","TDM","TPDM","PIA_gsi","PIA-","PIA+")
@@ -149,16 +151,15 @@ save(preds.df, file = "~/pep725/data/preds.df.RData")
 
 ```
 
-### Load datalist and inputs
+Load datalist and inputs
 ```{r,include=FALSE,eval=FALSE}
 load("~/pep725/data/datalist.RData")
 load("~/pep725/data/phenor_input.RData")
 load("~/pep725/data/preds.df.RData")
 load("~/pep725/data/df_tseries_id.RData")
-
 ```
 
-### Load subset of data
+Load subset of data
 ```{r,include=FALSE,eval=TRUE}
 load("~/calibration/data/datalist_example.RData")
 preds.df <- read.csv("~/calibration/data/preds.df_example.csv",sep=";")
@@ -220,6 +221,7 @@ CDD.model = function(par, data){
   
   return(doy)
 }
+
 DM1.model = function(par, data){
   # exit the routine as some parameters are missing
   if (length(par) != 3){
@@ -261,6 +263,7 @@ DM1.model = function(par, data){
   
   return(doy)
 }
+
 DM2.model = function(par, data){
   # exit the routine as some parameters are missing
   if (length(par) != 3){
@@ -302,6 +305,7 @@ DM2.model = function(par, data){
   
   return(doy)
 }
+
 TPM.model = function(par, data){
   # exit the routine as some parameters are missing
   if (length(par) != 4){
@@ -342,6 +346,7 @@ TPM.model = function(par, data){
   
   return(doy)
 }
+
 SecondGen_PIA.models = function(par, predictor, data) {
   # exit the routine as some parameters are missing
   if (length(par) != 5 & length(par) != 6){
@@ -407,12 +412,11 @@ SecondGen_PIA.models = function(par, predictor, data) {
   
   return(doy)
 }
-
 ```
 
 ## Site-species (timeseries) calibration using the phenor package
 
-### Select a timeseries (site-species calibration)
+Select a timeseries (site-species calibration)
 ```{r ,include=FALSE,eval=TRUE}
 args = commandArgs(trailingOnly=TRUE)
 
@@ -429,7 +433,7 @@ sp <- df_tmp %>% pull(Species)
 site <- df_tmp %>% pull(PEP_ID)
 ```
 
-### Estimate model parameters and predictions
+Estimate model parameters and predictions
 ```{r, include=FALSE, eval=TRUE}
 ##------------------------------------------
 ## Predictions
@@ -710,14 +714,12 @@ PlotPIAplus <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$`Pred_D
 ```
 
 ```{r,echo=FALSE, fig.height=6,fig.width=8, eval=TRUE}
-
 ggarrange(PlotOBS,PlotCDD,PlotDM1,PlotDM2,PlotTPM,PlotSIAM,PlotTDM,PlotTPDM,PlotPIAgsi,PlotPIAminus,PlotPIAplus)
-
 ```
 
 ## Site-species (timeseries) calibration using the phenor package
 
-### Select a timeseries (site-species calibration)
+Select a timeseries (site-species calibration)
 ```{r, include=FALSE, eval=TRUE}
 args = commandArgs(trailingOnly=TRUE)
 
@@ -734,7 +736,7 @@ sp <- df_tmp %>% pull(Species)
 site <- df_tmp %>% pull(PEP_ID)
 ```
 
-### Estimate model parameters and predictions
+Estimate model parameters and predictions
 ```{r, include=FALSE, eval=TRUE}
 ##------------------------------------------
 ## Predictions
@@ -1015,8 +1017,6 @@ PlotPIAplus <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$`Pred_D
 ```
 
 ```{r,echo=FALSE, fig.height=6,fig.width=8, eval=TRUE}
-
 ggarrange(PlotOBS,PlotCDD,PlotDM1,PlotDM2,PlotTPM,PlotSIAM,PlotTDM,PlotTPDM,PlotPIAgsi,PlotPIAminus,PlotPIAplus)
-
 ```
 

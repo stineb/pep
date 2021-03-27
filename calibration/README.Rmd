@@ -6,6 +6,7 @@ output: html_document
 ### PEP725
 
 #### TimeseriesCalibration.Rmd
+
 The TimeseriesCalibration.Rmd tries to reproduce the Fig 3A from in Zani et al. 2020.
 
 Timeseries (site-species) calibration outputs are gather together after being run in Euler.
@@ -13,6 +14,7 @@ Timeseries (site-species) calibration outputs are gather together after being ru
 Fig 3A is presented following the code in ModelAnalysis_3_Models_Performance.R provided by the authors.
 
 #### ExampleCalibration.Rmd
+
 The ExampleCalibration.Rmd file tries to reproduce the timeseries (site-species) calibration done by Zani et al. 2020.
 
 The example mostly uses the script ModelAnalyses_2_AutumnPhenology_Optimization_Predictions.R provided by the authors in Zenodo (with some changes needed for running the particular case of 2 timeseries).
