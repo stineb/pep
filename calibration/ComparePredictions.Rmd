@@ -26,8 +26,9 @@ This script compares the predicted autumn senescense read from the ModelAnalysis
 
 ```{r,include=FALSE,eval=TRUE}
 load("~/pep/calibration/data/datalist_demo.RData")
-load("~/pep/calibration/data/preds.df_demo.RData")
+load("~/pep/calibration/data/preds_df_demo.RData")
 load("~/pep/calibration/data/df_tseries_id_demo.RData")
+
 ```
 
 ### B. Define the models
@@ -109,8 +110,8 @@ SecondGen_PIA.models = function(par, predictor, data) {
   if(length(par)==6) {
     d = as.numeric(par[5])
     e = as.numeric(par[6])
-    pred1 = predictor[1] #xxx? predictor[[1]] predictor is given as a vector in the calibration and predictions and should be a list
-    pred2 = predictor[2] #xxx? predictor[[2]] predictor is given as a vector in the calibration and predictions and should be a list
+    pred1 = predictor[[1]] #xxx? predictor[[1]] predictor is given as a vector in the calibration and predictions and should be a list
+    pred2 = predictor[[2]] #xxx? predictor[[2]] predictor is given as a vector in the calibration and predictions and should be a list
   }
   
   # create forcing/chilling rate vector at the day level
@@ -135,7 +136,7 @@ SecondGen_PIA.models = function(par, predictor, data) {
   
   if(length(par)==5) {
     # add predictor at the end of the matrix-columns
-    Rf = rbind(Rf,predictor)
+    Rf = rbind(Rf,pred) # pred instead of predictor
     
     # predict date of leaf.off
     doy = apply(Rf,2, function(xt){
@@ -253,7 +254,7 @@ PlotTPM <- ggplot(data = subsetPred_1, aes(x = predfromparam.AnomDoYoff_TPM, y =
 parTPDM <- c(subset_opt_param_1$Pbase_TPDM,subset_opt_param_1$a_TPDM,subset_opt_param_1$b_TPDM,subset_opt_param_1$c_TPDM,subset_opt_param_1$d_TPDM,
              subset_opt_param_1$e_TPDM)
 # Evaluating the TPDM model with the optimal parameters and the data for this timeseries
-predfromparam.TPDM.model = SecondGen_PIA.models(par = parTPDM, predictor = c(preds.sub$temp_GS,preds.sub$RD_summer), data = data.sub)
+predfromparam.TPDM.model = SecondGen_PIA.models(par = parTPDM, predictor = list(preds.sub$temp_GS,preds.sub$RD_summer), data = data.sub)
 # Adding this predictions (from model evaluation) to the dataset read in ModelAnalysis_1_Predicted_DoYoff_subset.csv for this timeseries
 subsetPred_1$predfromparam.TPDM.model <- predfromparam.TPDM.model
 # Calculate anomalies subtracting the meansite_DoYoff
@@ -381,7 +382,7 @@ PlotTPM <- ggplot(data = subsetPred_2, aes(x = predfromparam.AnomDoYoff_TPM, y =
 parTPDM <- c(subset_opt_param_2$Pbase_TPDM,subset_opt_param_2$a_TPDM,subset_opt_param_2$b_TPDM,subset_opt_param_2$c_TPDM,subset_opt_param_2$d_TPDM,
              subset_opt_param_2$e_TPDM)
 # Evaluating the TPDM model with the optimal parameters and the data for this timeseries
-predfromparam.TPDM.model = SecondGen_PIA.models(par = parTPDM, predictor = c(preds.sub$temp_GS,preds.sub$RD_summer), data = data.sub)
+predfromparam.TPDM.model = SecondGen_PIA.models(par = parTPDM, predictor = list(preds.sub$temp_GS,preds.sub$RD_summer), data = data.sub)
 # Adding this predictions (from model evaluation) to the dataset read in ModelAnalysis_1_Predicted_DoYoff_subset.csv for this timeseries
 subsetPred_2$predfromparam.TPDM.model <- predfromparam.TPDM.model
 # Calculate anomalies subtracting the meansite_DoYoff
@@ -509,7 +510,7 @@ PlotTPM <- ggplot(data = subsetPred_3, aes(x = predfromparam.AnomDoYoff_TPM, y =
 parTPDM <- c(subset_opt_param_3$Pbase_TPDM,subset_opt_param_3$a_TPDM,subset_opt_param_3$b_TPDM,subset_opt_param_3$c_TPDM,subset_opt_param_3$d_TPDM,
              subset_opt_param_3$e_TPDM)
 # Evaluating the TPDM model with the optimal parameters and the data for this timeseries
-predfromparam.TPDM.model = SecondGen_PIA.models(par = parTPDM, predictor = c(preds.sub$temp_GS,preds.sub$RD_summer), data = data.sub)
+predfromparam.TPDM.model = SecondGen_PIA.models(par = parTPDM, predictor = list(preds.sub$temp_GS,preds.sub$RD_summer), data = data.sub)
 # Adding this predictions (from model evaluation) to the dataset read in ModelAnalysis_1_Predicted_DoYoff_subset.csv for this timeseries
 subsetPred_3$predfromparam.TPDM.model <- predfromparam.TPDM.model
 # Calculate anomalies subtracting the meansite_DoYoff
