@@ -28,7 +28,6 @@ This script compares the predicted autumn senescense read from the ModelAnalysis
 load("~/pep/calibration/data/datalist_demo.RData")
 load("~/pep/calibration/data/preds_df_demo.RData")
 load("~/pep/calibration/data/df_tseries_id_demo.RData")
-
 ```
 
 ### B. Define the models
@@ -123,7 +122,7 @@ SecondGen_PIA.models = function(par, predictor, data) {
   t0 <- vector()
   for(col in 1:ncol(data$Tmini)) {
     interval = 1:366
-    t0A = interval[which(data$Li[,col] < 173)] #xxx? P_base instead of 173
+    t0A = interval[which(data$Li[,col] < P_base)] #xxx? P_base instead of 173
     ind1 = min(which(t0A > 173))
     t0A = t0A[ind1]
     t0 = c(t0,t0A)
@@ -207,7 +206,6 @@ PlotTPM <- ggplot(data = subsetPred_1, aes(x = Pred_AnomDoYoff_TPM, y = Obs_Anom
               subtitle = "Model TPM",
               caption = "")
 
-
 PlotTPDM <- ggplot(data = subsetPred_1, aes(x = Pred_AnomDoYoff_TPDM, y = Obs_AnomDoYoff)) + geom_point() + 
   scale_x_continuous("Predicted from phenor pkg fc") + scale_y_continuous("Observed autumn anomaly ") + theme_classic() +
   labs(title = "",
@@ -281,6 +279,32 @@ PlotPIAplus <- ggplot(data = subsetPred_1, aes(x = predfromparam.AnomDoYoff_PIAp
               subtitle = "Model PIA+",
               caption = "Data source: Predictions from optim params (ModelAnalysis_2_OptimalParameters_subset.csv) and data.sub evaluated in the models")
 
+```
+
+```{r,echo=FALSE, warning = FALSE, fig.height=4,fig.width=12, eval=TRUE}
+ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
+```
+
+c) These figures plot both predictions calculated using the phenor pck functions vs. predictions calculated from the optimal parameters.
+
+```{r,include=FALSE,eval=TRUE}
+# Plotting observations vs. predictions from parameters
+PlotTPM <- ggplot(data = subsetPred_1, aes(x = predfromparam.AnomDoYoff_TPM, y = Pred_AnomDoYoff_TPM)) + geom_point() + 
+  scale_x_continuous("Predicted from optimal parameters evaluation") + scale_y_continuous("Predicted from phenor pkg") + theme_classic() +
+  labs(title = "Predicted from model evaluation",
+              subtitle = "Model TPM",
+              caption = "")
+
+PlotTPDM <- ggplot(data = subsetPred_1, aes(x = predfromparam.AnomDoYoff_TPDM, y = Pred_AnomDoYoff_TPDM)) + geom_point() + 
+  scale_x_continuous("Predicted from optimal parameters evaluation") + scale_y_continuous("Predicted from phenor pkg") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model TPDM",
+              caption = "")
+
+PlotPIAplus <- ggplot(data = subsetPred_1, aes(x = predfromparam.AnomDoYoff_PIAplus, y = `Pred_AnomDoYoff_PIA+`)) + geom_point() + 
+  scale_x_continuous("Predicted from optimal parameters evaluation") + scale_y_continuous("Predicted from phenor pkg") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model PIA+")
 ```
 
 ```{r,echo=FALSE, warning = FALSE, fig.height=4,fig.width=12, eval=TRUE}
@@ -415,6 +439,32 @@ PlotPIAplus <- ggplot(data = subsetPred_2, aes(x = predfromparam.AnomDoYoff_PIAp
 ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 ```
 
+c) These figures plot both predictions calculated using the phenor pck functions vs. predictions calculated from the optimal parameters.
+
+```{r,include=FALSE,eval=TRUE}
+# Plotting observations vs. predictions from parameters
+PlotTPM <- ggplot(data = subsetPred_2, aes(x = predfromparam.AnomDoYoff_TPM, y = Pred_AnomDoYoff_TPM)) + geom_point() + 
+  scale_x_continuous("Predicted from optimal parameters evaluation") + scale_y_continuous("Predicted from phenor pkg") + theme_classic() +
+  labs(title = "Predicted from model evaluation",
+              subtitle = "Model TPM",
+              caption = "")
+
+PlotTPDM <- ggplot(data = subsetPred_2, aes(x = predfromparam.AnomDoYoff_TPDM, y = Pred_AnomDoYoff_TPDM)) + geom_point() + 
+  scale_x_continuous("Predicted from optimal parameters evaluation") + scale_y_continuous("Predicted from phenor pkg") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model TPDM",
+              caption = "")
+
+PlotPIAplus <- ggplot(data = subsetPred_2, aes(x = predfromparam.AnomDoYoff_PIAplus, y = `Pred_AnomDoYoff_PIA+`)) + geom_point() + 
+  scale_x_continuous("Predicted from optimal parameters evaluation") + scale_y_continuous("Predicted from phenor pkg") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model PIA+")
+```
+
+```{r,echo=FALSE, warning = FALSE, fig.height=4,fig.width=12, eval=TRUE}
+ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
+```
+
 ### Example 3. Timeseries: 1002_Aesculus_hippocastanum
 
 1. Select data for the timeseries
@@ -543,3 +593,28 @@ PlotPIAplus <- ggplot(data = subsetPred_3, aes(x = predfromparam.AnomDoYoff_PIAp
 ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 ```
 
+c) These figures plot both predictions calculated using the phenor pck functions vs. predictions calculated from the optimal parameters.
+
+```{r,include=FALSE,eval=TRUE}
+# Plotting observations vs. predictions from parameters
+PlotTPM <- ggplot(data = subsetPred_3, aes(x = predfromparam.AnomDoYoff_TPM, y = Pred_AnomDoYoff_TPM)) + geom_point() + 
+  scale_x_continuous("Predicted from optimal parameters evaluation") + scale_y_continuous("Predicted from phenor pkg") + theme_classic() +
+  labs(title = "Predicted from model evaluation",
+              subtitle = "Model TPM",
+              caption = "")
+
+PlotTPDM <- ggplot(data = subsetPred_3, aes(x = predfromparam.AnomDoYoff_TPDM, y = Pred_AnomDoYoff_TPDM)) + geom_point() + 
+  scale_x_continuous("Predicted from optimal parameters evaluation") + scale_y_continuous("Predicted from phenor pkg") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model TPDM",
+              caption = "")
+
+PlotPIAplus <- ggplot(data = subsetPred_3, aes(x = predfromparam.AnomDoYoff_PIAplus, y = `Pred_AnomDoYoff_PIA+`)) + geom_point() + 
+  scale_x_continuous("Predicted from optimal parameters evaluation") + scale_y_continuous("Predicted from phenor pkg") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model PIA+")
+```
+
+```{r,echo=FALSE, warning = FALSE, fig.height=4,fig.width=12, eval=TRUE}
+ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
+```

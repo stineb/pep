@@ -191,7 +191,7 @@ preds.sub <- preds.df %>% dplyr::filter(timeseries==ts)
 
 2. Estimate model parameters and predictions
 
-```{r, include=FALSE, eval=TRUE}
+```{r, include=FALSE, eval=FALSE}
 ##------------------------------------------
 ## Predictions
 ##------------------------------------------
@@ -228,7 +228,7 @@ optimal_pars <- optimize_parameters(par = NULL,
                                   method = "GenSA",
                                   lower = c(11,0.02,100,0,0,0),
                                   upper = c(16,0.1,250,300,1,1),
-                                  control = list(max.call = 40000))
+                                  control = list(max.call = 80000))
 opt_pars.sub$Pbase_TPDM <- optimal_pars$par[1]
 opt_pars.sub$a_TPDM <- optimal_pars$par[2]
 opt_pars.sub$b_TPDM <- optimal_pars$par[3]
@@ -345,6 +345,33 @@ PlotPIAplus <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = `Preds_AnomDo
 ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 ```
 
+c) These figures plot predictions from calibration using the phenor pck functions vs. predictions provided by Zani et al. in Zenodo.
+
+```{r, include=FALSE, eval=TRUE}
+
+# Reading sample outputs from Zani et al. for predictions
+pred_DoYoff <- data.table::fread("~/pep/calibration/output/ModelAnalysis_1_Predicted_DoYoff_subset.csv") 
+subsetPred_1 <- pred_DoYoff %>% filter(timeseries=="1_Fagus sylvatica")
+
+# Loading calibration outputs for one timeseries
+load("~/pep/calibration/output/DoYoff_Preds.df_1_Fagus_sylvatica.RData")
+DoYoff_Preds.df_site_species <- DoYoff_Preds.df
+
+PlotTPM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPM, y = subsetPred_1$Pred_DoYoff_TPM), aes(x = x, y = y)) + geom_point() + 
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPM predictions")
+
+PlotTPDM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPDM, y = subsetPred_1$Pred_DoYoff_TPDM), aes(x = x, y = y)) + geom_point() + 
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPDM predictions")
+
+PlotPIAplus <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$`Pred_DoYoff_PIA+`, y = subsetPred_1$`Pred_DoYoff_PIA+`), aes(x = x, y = y)) + geom_point() + 
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("PIA+ predictions")
+
+```
+
+```{r,echo=FALSE,warning = FALSE, fig.height=4,fig.width=12, eval=TRUE}
+ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
+```
+
 ### C. Example 2. Timeseries: 1_Quercus_robur
 
 1. Select data for the timeseries
@@ -379,7 +406,7 @@ preds.sub <- preds.df %>% dplyr::filter(timeseries==ts)
 
 2. Estimate model parameters and predictions
 
-```{r, include=FALSE, eval=TRUE}
+```{r, include=FALSE, eval=FALSE}
 ##------------------------------------------
 ## Predictions
 ##------------------------------------------
@@ -533,6 +560,33 @@ PlotPIAplus <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = `Preds_AnomDo
 ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 ```
 
+c) These figures plot predictions from calibration using the phenor pck functions vs. predictions provided by Zani et al. in Zenodo.
+
+```{r, include=FALSE, eval=TRUE}
+
+# Reading sample outputs from Zani et al. for predictions
+pred_DoYoff <- data.table::fread("~/pep/calibration/output/ModelAnalysis_1_Predicted_DoYoff_subset.csv") 
+subsetPred_1 <- subset(pred_DoYoff, timeseries=="1_Quercus robur")
+
+# Loading calibration outputs for one timeseries
+load("~/pep/calibration/output/DoYoff_Preds.df_1_Quercus_robur.RData")
+DoYoff_Preds.df_site_species <- DoYoff_Preds.df
+
+PlotTPM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPM, y = subsetPred_1$Pred_DoYoff_TPM), aes(x = x, y = y)) + geom_point() + 
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPM predictions")
+
+PlotTPDM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPDM, y = subsetPred_1$Pred_DoYoff_TPDM), aes(x = x, y = y)) + geom_point() + 
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPDM predictions")
+
+PlotPIAplus <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$`Pred_DoYoff_PIA+`, y = subsetPred_1$`Pred_DoYoff_PIA+`), aes(x = x, y = y)) + geom_point() + 
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("PIA+ predictions")
+
+```
+
+```{r,echo=FALSE,warning = FALSE, fig.height=4,fig.width=12, eval=TRUE}
+ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
+```
+
 ### C. Example 3. Timeseries: 1002_Aesculus_hippocastanum
 
 1. Select data for the timeseries
@@ -567,7 +621,7 @@ preds.sub <- preds.df %>% dplyr::filter(timeseries==ts)
 
 2. Estimate model parameters and predictions
 
-```{r, include=FALSE, eval=TRUE}
+```{r, include=FALSE, eval=FALSE}
 ##------------------------------------------
 ## Predictions
 ##------------------------------------------
@@ -721,3 +775,29 @@ PlotPIAplus <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = `Preds_AnomDo
 ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 ```
 
+c) These figures plot predictions from calibration using the phenor pck functions vs. predictions provided by Zani et al. in Zenodo.
+
+```{r, include=FALSE, eval=TRUE}
+
+# Reading sample outputs from Zani et al. for predictions
+pred_DoYoff <- data.table::fread("~/pep/calibration/output/ModelAnalysis_1_Predicted_DoYoff_subset.csv") 
+subsetPred_1 <- subset(pred_DoYoff, timeseries=="1002_Aesculus hippocastanum")
+
+# Loading calibration outputs for one timeseries
+load("~/pep/calibration/output/DoYoff_Preds.df_1002_Aesculus_hippocastanum.RData")
+DoYoff_Preds.df_site_species <- DoYoff_Preds.df
+
+PlotTPM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPM, y = subsetPred_1$Pred_DoYoff_TPM), aes(x = x, y = y)) + geom_point() + 
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPM predictions")
+
+PlotTPDM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPDM, y = subsetPred_1$Pred_DoYoff_TPDM), aes(x = x, y = y)) + geom_point() + 
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPDM predictions")
+
+PlotPIAplus <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$`Pred_DoYoff_PIA+`, y = subsetPred_1$`Pred_DoYoff_PIA+`), aes(x = x, y = y)) + geom_point() + 
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("PIA+ predictions")
+
+```
+
+```{r,echo=FALSE,warning = FALSE, fig.height=4,fig.width=12, eval=TRUE}
+ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
+```
