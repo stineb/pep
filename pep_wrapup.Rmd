@@ -1,0 +1,250 @@
+---
+title: "Wrap up of re-analysis of Zani et al"
+author: "Beni Stocker"
+date: "4/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(broom)
+library(rbeni)
+library(lme4) #lmer
+library(MuMIn) #r.squaredGLMM
+library(lmerTest) #p-values
+library(effects) #plot effects
+library(sjPlot) #plot effects
+library(patchwork)
+
+ggplot_on <- function(x){
+  df <- tibble(upper = x$`scale(on)`$upper[,1],
+                   lower = x$`scale(on)`$lower[,1],
+                   off = x$`scale(on)`$fit[,1],
+                   on = x$`scale(on)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = on, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(on, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = "SOS (DOY)", y = "EOS (DOY)")
+  return(gg)
+}
+
+ggplot_year <- function(x){
+  df <- tibble(upper = x$`scale(year)`$upper[,1],
+                   lower = x$`scale(year)`$lower[,1],
+                   off = x$`scale(year)`$fit[,1],
+                   year = x$`scale(year)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(year, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = "Year", y = "EOS (DOY)")
+  return(gg)
+}
+
+ggplot_cA_tot <- function(x){
+  
+  df <- tibble(upper = x$`scale(cA_tot)`$upper[,1],
+                   lower = x$`scale(cA_tot)`$lower[,1],
+                   off = x$`scale(cA_tot)`$fit[,1],
+                   cA_tot = x$`scale(cA_tot)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = cA_tot, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(cA_tot, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = expression(italic("A")[net]), y = "EOS (DOY)")
+  
+  return(gg)
+}
+
+ggplot_gpp_net <- function(x){
+  
+  df <- tibble(upper = x$`scale(gpp_net)`$upper[,1],
+                   lower = x$`scale(gpp_net)`$lower[,1],
+                   off = x$`scale(gpp_net)`$fit[,1],
+                   gpp_net = x$`scale(gpp_net)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = gpp_net, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(gpp_net, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = expression(italic("A")[net]), y = "EOS (DOY)")
+  
+  return(gg)
+}
+```
+
+## Load data
+
+Read the data complemented with drivers, obtained from Constantin Zohner (7.12.2020).
+```{r}
+df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
+  as_tibble() %>% 
+  rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
+         anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
+         species = Species, id_site = PEP_ID, id_species_site = timeseries) %>% 
+  
+  ## use the non-water-stressed version of A
+  mutate(cA_tot = `cA_tot-w`)
+
+# ## test
+# tmp <- df %>% 
+#   dplyr::select(id_site, id_species_site) %>% 
+#   group_by(id_site) %>% 
+#   nest() %>% 
+#   mutate(data = map(data, ~distinct(.)))
+```
+
+Taking uncorrected Zani
+```{r}
+df_anl <- df
+```
+
+Add P-model outputs.
+```{r}
+load("data/df_pmodel_zani.RData")
+
+df_anl <- df_pmodel_zani %>% 
+  unnest(out_pmodel) %>% 
+  right_join(df_anl, by = c("id_species_site", "year")) %>% 
+  mutate(gpp_net = gpp - rd,
+         lue = gpp / apar)
+```
+
+## Data volume
+
+Distribution of number of data points per time series.
+```{r}
+df_ndata <- df_anl %>% 
+  group_by(id_species_site) %>% 
+  summarise(count = n())
+
+quantile(df_ndata$count, probs = 0.9)
+
+df_ndata %>% 
+  ggplot(aes(count, ..count..)) +
+  geom_histogram(bins = 20) +
+  xlab("N data points per time series (years)") +
+  labs(title = "PEP725 phenology time series lengthts")
+```
+
+## IAV
+
+### SOS
+
+```{r}
+Fit_IAV_on = lmer(off ~ scale(on) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+
+aic_iav_zz <- AIC(Fit_IAV_on)
+out_plot <- allEffects(Fit_IAV_on)
+gg_iav_sos <- ggplot_on(out_plot)
+gg_iav_sos
+```
+
+### Anet LPJ
+
+```{r}
+Fit_IAV_cA_tot = lmer(off ~ scale(cA_tot) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+
+aic_iav_zz <- AIC(Fit_IAV_cA_tot)
+out_plot <- allEffects(Fit_IAV_cA_tot)
+gg_iav_zz <- ggplot_cA_tot(out_plot)
+gg_iav_zz
+```
+
+### Anet P-model
+
+```{r}
+fit = lmer(off ~ scale(gpp_net) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+
+aic_iav_us <- AIC(fit)
+out_plot <- allEffects(fit)
+gg_iav_us <- ggplot_gpp_net(out_plot)
+gg_iav_us
+```
+
+
+## IAV vs. long-term
+
+### SOS
+
+```{r}
+Fit_LT_on = lmer(off ~ scale(on) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+
+aic_lt_zz <- AIC(Fit_LT_on)
+out_plot <- allEffects(Fit_LT_on)
+gg_lt_sos_on <- ggplot_on(out_plot)
+gg_lt_sos_year <- ggplot_year(out_plot)
+
+gg_lt_sos_on + gg_lt_sos_year
+```
+
+Long-term trend in SOS.
+```{r}
+mod_on_year <- lmer(on ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+
+out_plot <- allEffects(mod_on_year)
+gg_lt_sos_year <- ggplot_year(out_plot)
+
+gg_lt_sos_year <- gg_lt_sos_year + ylab("SOS (DOY)") + 
+  theme(plot.background = element_rect(fill = "grey70"))
+
+gg_lt_sos_year
+```
+
+### Anet LPJ
+
+```{r}
+Fit_LT_cA_tot = lmer(off ~ scale(cA_tot) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+
+aic_lt_zz <- AIC(Fit_LT_cA_tot)
+out_plot <- allEffects(Fit_LT_cA_tot)
+gg_lt_zz_anet <- ggplot_cA_tot(out_plot)
+gg_lt_zz_year <- ggplot_year(out_plot)
+
+gg_lt_zz_anet + gg_lt_zz_year
+```
+
+Long-term trend in Anet
+```{r}
+mod_anet_year <- lmer(cA_tot ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+
+out_plot <- allEffects(mod_anet_year)
+gg_lt_anet_year <- ggplot_year(out_plot)
+
+gg_lt_anet_year + 
+  labs(y = expression(italic("A")[net])) + 
+  theme(plot.background = element_rect(fill = "grey70"))
+```
+
+
+### Anet P-model
+
+```{r}
+fit = lmer(off ~ scale(gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+
+summary(fit)
+aic_lt_zz <- AIC(fit)
+out_plot <- allEffects(fit)
+gg_lt_us_anet <- ggplot_gpp_net(out_plot)
+gg_lt_us_year <- ggplot_year(out_plot)
+
+gg_lt_us_anet + gg_lt_us_year
+```
+
+Long-term trend in Anet
+```{r}
+mod_anet_year <- lmer(gpp_net ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+
+out_plot <- allEffects(mod_anet_year)
+gg_lt_anet_year <- ggplot_year(out_plot)
+
+gg_lt_anet_year + 
+  labs(y = expression(italic("A")[net])) + 
+  theme(plot.background = element_rect(fill = "grey70"))
+```
+
+
+
+
