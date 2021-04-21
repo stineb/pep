@@ -18,6 +18,7 @@ library(effects) #plot effects
 library(sjPlot) #plot effects
 library(patchwork)
 
+## functions to convert lmer effects plots to ggplot objects
 ggplot_on <- function(x){
   df <- tibble(upper = x$`scale(on)`$upper[,1],
                    lower = x$`scale(on)`$lower[,1],
@@ -54,7 +55,7 @@ ggplot_cA_tot <- function(x){
     geom_ribbon(data = df, aes(x = cA_tot, ymin = lower, ymax = upper), alpha = 0.2) +
     geom_line(data = df, aes(cA_tot, off), col = "royalblue") +
     theme_classic() +
-    labs(x = expression(italic("A")[net]), y = "EOS (DOY)")
+    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, "yr"^-2, ")")), y = "EOS (DOY)")
   
   return(gg)
 }
@@ -69,7 +70,7 @@ ggplot_gpp_net <- function(x){
     geom_ribbon(data = df, aes(x = gpp_net, ymin = lower, ymax = upper), alpha = 0.2) +
     geom_line(data = df, aes(gpp_net, off), col = "royalblue") +
     theme_classic() +
-    labs(x = expression(italic("A")[net]), y = "EOS (DOY)")
+    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, "yr"^-2, ")")), y = "EOS (DOY)")
   
   return(gg)
 }
@@ -83,10 +84,10 @@ df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") 
   as_tibble() %>% 
   rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
          anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
-         species = Species, id_site = PEP_ID, id_species_site = timeseries) %>% 
+         species = Species, id_site = PEP_ID, id_species_site = timeseries)
   
-  ## use the non-water-stressed version of A
-  mutate(cA_tot = `cA_tot-w`)
+  # ## use the non-water-stressed version of A
+  # mutate(cA_tot = `cA_tot-w`)
 
 # ## test
 # tmp <- df %>% 
@@ -101,6 +102,32 @@ Taking uncorrected Zani
 df_anl <- df
 ```
 
+Correct Zani EOS dates
+```{r}
+## what does the original data say?
+load("data/df_PEP725_alldata.RData") # loads 'df'
+df_orig <- df %>% 
+  dplyr::filter(phase_id %in% c(10, 11, 13, 95, 205)) %>% 
+  mutate(pheno = ifelse(phase_id %in% c(10, 11, 13), "on", ifelse(phase_id %in% c(95, 205), "off", NA))) %>% 
+  rename(id_site = s_id)
+
+## take the mean across inconsistent duplicates. 3,223,360 -> 2,987,845 data points.
+df_orig <- df_orig %>% 
+  dplyr::select(id_site, species, year, pheno, day) %>% 
+  group_by(id_site, species, year, pheno) %>% 
+  summarise(day = round(mean(day), 0))
+
+df_orig_wide <- df_orig %>% 
+   pivot_wider(names_from = "pheno", values_from = "day")
+
+df_anl <- df_zani %>% 
+  rename(on_zani = on, off_zani = off) %>% 
+  left_join(df_orig_wide, by = c("id_site", "species", "year"))
+
+out <- df_anl %>% analyse_modobs2("off", "off_zani", type = "heat")
+out$gg
+```
+
 Add P-model outputs.
 ```{r}
 load("data/df_pmodel_zani.RData")
@@ -110,6 +137,13 @@ df_anl <- df_pmodel_zani %>%
   right_join(df_anl, by = c("id_species_site", "year")) %>% 
   mutate(gpp_net = gpp - rd,
          lue = gpp / apar)
+```
+
+Check consistency of P-model and LPJ-GUESS GPP.
+```{r}
+out <- df_anl %>% 
+  analyse_modobs2("cA_tot", "gpp_net", type = "heat")
+out$gg
 ```
 
 ## Data volume
@@ -185,12 +219,12 @@ Long-term trend in SOS.
 mod_on_year <- lmer(on ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
 
 out_plot <- allEffects(mod_on_year)
-gg_lt_sos_year <- ggplot_year(out_plot)
+gg_lt_sos_year_t <- ggplot_year(out_plot)
 
-gg_lt_sos_year <- gg_lt_sos_year + ylab("SOS (DOY)") + 
-  theme(plot.background = element_rect(fill = "grey70"))
+gg_lt_sos_year_t <- gg_lt_sos_year_t + ylab("SOS (DOY)") + 
+  theme(plot.background = element_rect(fill = "grey80"))
 
-gg_lt_sos_year
+gg_lt_sos_year_t
 ```
 
 ### Anet LPJ
@@ -213,15 +247,16 @@ mod_anet_year <- lmer(cA_tot ~ scale(year) + (1|id_site) + (1|species), data = d
 out_plot <- allEffects(mod_anet_year)
 gg_lt_anet_year <- ggplot_year(out_plot)
 
-gg_lt_anet_year + 
+gg_lt_anet_year <- gg_lt_anet_year + 
   labs(y = expression(italic("A")[net])) + 
-  theme(plot.background = element_rect(fill = "grey70"))
+  theme(plot.background = element_rect(fill = "grey80"))
 ```
 
 
 ### Anet P-model
 
 ```{r}
+load("data/df_anl_pmodel.RData")
 fit = lmer(off ~ scale(gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
 
 summary(fit)
@@ -240,11 +275,40 @@ mod_anet_year <- lmer(gpp_net ~ scale(year) + (1|id_site) + (1|species), data = 
 out_plot <- allEffects(mod_anet_year)
 gg_lt_anet_year <- ggplot_year(out_plot)
 
-gg_lt_anet_year + 
+gg_lt_anet_year <- gg_lt_anet_year + 
   labs(y = expression(italic("A")[net])) + 
-  theme(plot.background = element_rect(fill = "grey70"))
+  theme(plot.background = element_rect(fill = "grey80"))
 ```
 
+## Figure 1
 
+```{r}
+pp <- (gg_iav_zz + gg_lt_anet_year) /
+  (gg_lt_zz_anet + gg_lt_zz_year)
+pp + plot_annotation(
+  title = expression(paste("EOS ~ ", italic("A")[net], " Zani et al.")),
+  tag_levels = 'A'
+)
+ggsave("fig/fig_1_wrapup_zz.pdf", width = 8, height = 6)
+ggsave("fig/fig_1_wrapup_zz.png", width = 8, height = 6)
+
+pp <- (gg_iav_sos + gg_lt_sos_year_t) /
+  (gg_lt_sos_on + gg_lt_sos_year)
+pp + plot_annotation(
+  title = expression(paste("EOS ~ SOS")),
+  tag_levels = 'A'
+)
+ggsave("fig/fig_1_wrapup_sos.pdf", width = 8, height = 6)
+ggsave("fig/fig_1_wrapup_sos.png", width = 8, height = 6)
+
+pp <- (gg_iav_us + gg_lt_anet_year) /
+  (gg_lt_us_anet + gg_lt_us_year)
+pp + plot_annotation(
+  title = expression(paste("EOS ~ ", italic("A")[net], " P-model")),
+  tag_levels = 'A'
+)
+ggsave("fig/fig_1_wrapup_sos.pdf", width = 8, height = 6)
+ggsave("fig/fig_1_wrapup_sos.png", width = 8, height = 6)
+```
 
 

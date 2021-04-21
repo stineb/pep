@@ -195,6 +195,7 @@ optimal_pars <- pr_fit_parameters(par = NULL,
                                   lower = c(11,0.02,100,0),
                                   upper = c(16,0.1,250,200),
                                   control = list(max.call = 40000))
+
 opt_pars.sub$Pbase_TPM <- optimal_pars$par[1]
 opt_pars.sub$a_TPM <- optimal_pars$par[2]
 opt_pars.sub$b_TPM <- optimal_pars$par[3]
@@ -214,6 +215,7 @@ optimal_pars <- pr_fit_parameters(par = NULL,
                                   lower = c(11,0.02,100,0,0,0),
                                   upper = c(16,0.1,250,300,1,1),
                                   control = list(max.call = 40000))
+
 opt_pars.sub$Pbase_TPDM <- optimal_pars$par[1]
 opt_pars.sub$a_TPDM <- optimal_pars$par[2]
 opt_pars.sub$b_TPDM <- optimal_pars$par[3]
@@ -236,6 +238,7 @@ optimal_pars <- pr_fit_parameters(par = NULL,
                                   lower = c(11,0.02,100,0,0),
                                   upper = c(16,0.1,250,300,1),
                                   control = list(max.call = 40000))
+
 opt_pars.sub$`Pbase_PIA+` <- optimal_pars$par[1]
 opt_pars.sub$`a_PIA+` <- optimal_pars$par[2]
 opt_pars.sub$`b_PIA+` <- optimal_pars$par[3]
