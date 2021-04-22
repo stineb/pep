@@ -3,6 +3,7 @@ title: "README"
 output: html_document
 ---
 
+<<<<<<< HEAD
 ### PEP725
 
 #### TimeseriesCalibration.Rmd
@@ -22,6 +23,19 @@ The example mostly uses the script ModelAnalyses_2_AutumnPhenology_Optimization_
 The data used in the model calibration includes the drivers provided by the authors (data/DataMeta_3_Drivers_20_11_10.csv), and two more inputs: minimum temperature (data/MinimumTemperature.csv) and photoperiod (data/Photoperiod_daylength.csv) calculated from the data site information. 
 
 From these mentioned data drivers and inputs, the script creates a datalist with the structure needed for the calibration sing the phenor package.
+=======
+#### ComparePredictions
+The ComparePredictions.Rmd file compares the predicted autumn senescense read from the ModelAnalysis_1_Predicted_DoYoff_subset.csv file provided by Zani et al. in Zenodo with the predictions resulting from evaluating the models using the optimal parameters read from ModelAnalysis_2_OptimalParameters_subset.csv and data.sub for the 3 timeseries provided.
+
+#### CalibrationDemo.Rmd
+The CalibrationDemo.Rmd file tries to reproduce the timeseries (site-species) calibration done by Zani et al. 2020.
+
+The example mostly uses the script ModelAnalyses_2_AutumnPhenology_Optimization_Predictions.R provided by the authors in Zenodo (with some changes needed for running the particular case of 2 timeseries).
+
+The data used in the model calibration includes the drivers provided by the authors (data/DataMeta_3_Drivers_20_11_10.csv), and two more inputs: minimum temperature (data/MinimumTemperature.csv) and photoperiod (data/Photoperiod_daylength.csv) also provided by the authors. 
+
+From these mentioned data drivers and inputs, the script creates a datalist with the structure needed for the calibration using the phenor package.
+>>>>>>> a43828caea0cf55a45ecd0a76ebad0832f3a895a
 
 Definitions of the models are used as presented by Zani et al. 2020. However, we have identified possible errors in the original script ModelAnalyses_2_AutumnPhenology_Optimization_Predictions.R that may need to be discussed (see #xxx? in the script)
 
