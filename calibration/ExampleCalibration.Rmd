@@ -1,0 +1,479 @@
+---
+title: "Example calibration"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+# Load libraries
+library(data.table)
+library(tidyverse)
+library(broom)
+library(Metrics)
+library(lmodel2)
+library(ggplot2)
+library(phenor)
+#detach(package:phenor)
+library(ggpubr)
+```
+
+### Load subset of data for the example
+```{r,include=FALSE,eval=TRUE}
+load("data/datalist_example.RData")
+preds.df <- read.csv("data/preds.df_example.csv",sep=";")
+df_tseries_id <- read.csv("data/df_tseries_id_example.csv",sep=";")
+```
+
+### Define the models (copy and paste from Zani et al. 2020)
+```{r, include=FALSE,eval=TRUE}
+## MODELS OF LEAF SENESCENCE (and drivers):
+
+## First-generation:
+# CDD (chilling temperature) - Dufrene et al. (2005)
+# DM1 and DM2 (chilling temperature, autumn daylength) - Delpierre et al. (2009)
+# TPM (chilling temperature, autumn daylength) - Lang et al. (2019)
+## Second-generation:
+# SIAM (chilling temperature, autumn daylength, spring anomaly) - Keenan and Richardson (2015)
+# TDM and TPDM (chilling temperature, autumn daylength, growing season temperature / + water stress) - Liu et al. (2019)
+## PIA:
+# PIA_gsi (chilling temperature, autumn daylength, leaf flushing date, growing season mean temperature, daylength, vapour pressure deficit)
+# PIA-/+ (chilling temperature, autumn daylength, leaf flushing date, growing season mean temperature, daylength, precipitation, net radiation, CO2 concentration, -/+ water stress)
+
+TPM.model = function(par, data){
+  # exit the routine as some parameters are missing
+  if (length(par) != 4){
+    stop("model parameter(s) out of range (too many, too few)")
+  }
+  
+  # extract the parameter values from the par argument for readability
+  P_base = par[1]
+  a = par[2]
+  b = par[3]
+  F_crit = par[4]
+  
+  # create forcing/chilling rate vector at the day level
+  Rf = 1/(1+exp(a*(data$Tmini*data$Li-b)))
+  
+  # photoperiod-dependent start-date for chilling accumulation (t0)
+  # t0 is defined as the first day when photoperiod is shorter than the photoperiod threshold (P_base)
+  # after the date of the longest photoperiod (summer solstice), namely, the 173rd day of year
+  t0 <- vector()
+  for(c in 1:ncol(data$Tmini)) {
+    interval = 1:366
+    t0A = interval[which(data$Li[,c] < P_base)]
+    ind1 = min(which(t0A > 173))
+    t0A = t0A[ind1]
+    t0 = c(t0,t0A)
+  }
+  
+  # nullify values before the t0
+  for(c in 1:ncol(data$Tmini)){
+    Rf[1:t0[c],c] = 0 #nullify values before the date of leaf.out
+  }
+  
+  # calculate the summation along the year and derive the date of leaf.off
+  # DOY of budburst criterium
+  doy = apply(Rf,2, function(xt){
+    doy = which(cumsum(xt) >= F_crit)[1]
+  })
+  
+  return(doy)
+}
+
+SecondGen_PIA.models = function(par, predictor, data) {
+  # exit the routine as some parameters are missing
+  if (length(par) != 5 & length(par) != 6){
+    stop("model parameter(s) out of range (too many, too few)")
+  }
+  
+  # extract the parameter values from the
+  # par argument for readability
+  P_base = as.numeric(par[1])
+  a = as.numeric(par[2])
+  b = as.numeric(par[3])
+  c = as.numeric(par[4])
+  if(length(par)==5) {
+    d = as.numeric(par[5])
+    pred = predictor
+  }
+  if(length(par)==6) {
+    d = as.numeric(par[5])
+    e = as.numeric(par[6])
+    pred1 = predictor[1]
+    pred2 = predictor[2]
+  }
+  
+  # create forcing/chilling rate vector at the day level
+  Rf = 1/(1+exp(a*(data$Tmini*data$Li-b)))
+  
+  # photoperiod-dependent start-date for chilling accumulation (t0)
+  # t0 is defined as the first day when photoperiod is shorter than the photoperiod threshold (P_base)
+  # after the date of the longest photoperiod (summer solstice), namely, the 173rd day of year
+  t0 <- vector()
+  for(col in 1:ncol(data$Tmini)) {
+    interval = 1:366
+    t0A = interval[which(data$Li[,col] < 173)]
+    ind1 = min(which(t0A > 173))
+    t0A = t0A[ind1]
+    t0 = c(t0,t0A)
+  }
+  
+  # nullify values before the t0
+  for(col in 1:ncol(data$Tmini)){
+    Rf[1:t0[col],col] = 0 
+  }
+  
+  if(length(par)==5) {
+    # add predictor at the end of the matrix-columns
+    Rf = rbind(Rf,predictor)
+    
+    # predict date of leaf.off
+    doy = apply(Rf,2, function(xt){
+      doy = which(cumsum(xt[1:366]) >= c+d*xt[367])[1]
+    }) 
+  }
+  if(length(par)==6) {
+    # add predictors at the end of the matrix-columns
+    Rf = rbind(Rf,pred1)
+    Rf = rbind(Rf,pred2)
+    
+    # predict date of leaf.off
+    doy = apply(Rf,2, function(xt){
+      doy = which(cumsum(xt[1:366]) >= c+d*xt[367]+e*xt[368])[1]
+    }) 
+  }
+  
+  return(doy)
+}
+
+```
+
+## Site-species (timeseries) calibration using the phenor package Ex. 1 - 1_Fagus_sylvatica
+
+### Select a timeseries (site-species calibration)
+```{r ,include=FALSE,eval=TRUE}
+args = commandArgs(trailingOnly=TRUE)
+
+##------------------------------------------
+## Select a timeseries
+##------------------------------------------
+args <- as.character(df_tseries_id$idx[which(df_tseries_id$timeseries == "1_Fagus_sylvatica")]) # args <- c("2261") 
+
+##------------------------------------------
+## given timeseries number, determine species and pep_id given args[1]
+##------------------------------------------
+df_tmp <- df_tseries_id %>% 
+  dplyr::filter(idx == as.integer(args[1]))
+  
+sp <- df_tmp %>% pull(Species)
+site <- df_tmp %>% pull(PEP_ID)
+```
+
+### Estimate model parameters and predictions
+```{r, include=FALSE, eval=TRUE}
+##------------------------------------------
+## Predictions
+##------------------------------------------
+
+# Subset according to timeseries
+ts <- paste0(site,"_",sp) 
+data.sub <- DataList[[sp]][[as.character(site)]]
+preds.sub <- preds.df %>% dplyr::filter(timeseries==ts)
+
+# Initialize sub-dataframes to store results
+DoYoff_Preds.sub <- data.frame(timeseries=data.sub$site, Species=sp, YEAR=data.sub$year)
+DoYoff_Preds.sub$Obs_DoYoff <- data.sub$transition_dates
+opt_pars.sub <- data.frame(timeseries=ts, Species=sp, PEP_ID=site) 
+
+## TPM model
+optimal_pars <- pr_fit_parameters(par = NULL,
+                                  data = data.sub,
+                                  cost = rmse,
+                                  model = "TPM.model",
+                                  method = "GenSA",
+                                  lower = c(11,0.02,100,0),
+                                  upper = c(16,0.1,250,200),
+                                  control = list(max.call = 40000))
+
+opt_pars.sub$Pbase_TPM <- optimal_pars$par[1]
+opt_pars.sub$a_TPM <- optimal_pars$par[2]
+opt_pars.sub$b_TPM <- optimal_pars$par[3]
+opt_pars.sub$Fcrit_TPM <- optimal_pars$par[4]
+opt_pars.sub$RMSE_TPM <- optimal_pars$value
+DoYoff_Preds.sub$Pred_DoYoff_TPM <- pr_predict(par = optimal_pars$par,
+                                               data = data.sub,
+                                               model = "TPM.model")
+
+## TPDM model
+optimal_pars <- pr_fit_parameters(par = NULL,
+                                  predictor = c(preds.sub$temp_GS,preds.sub$RD_summer), #xxx list(preds.sub$temp_GS,preds.sub$RD_summer)
+                                  data = data.sub,
+                                  cost = rmse,
+                                  model = "SecondGen_PIA.models",
+                                  method = "GenSA",
+                                  lower = c(11,0.02,100,0,0,0),
+                                  upper = c(16,0.1,250,300,1,1),
+                                  control = list(max.call = 40000))
+
+opt_pars.sub$Pbase_TPDM <- optimal_pars$par[1]
+opt_pars.sub$a_TPDM <- optimal_pars$par[2]
+opt_pars.sub$b_TPDM <- optimal_pars$par[3]
+opt_pars.sub$c_TDPM <- optimal_pars$par[4]
+opt_pars.sub$d_TPDM <- optimal_pars$par[5]
+opt_pars.sub$e_TPDM <- optimal_pars$par[6]
+opt_pars.sub$RMSE_TPDM <- optimal_pars$value
+DoYoff_Preds.sub$Pred_DoYoff_TPDM <- pr_predict(par = optimal_pars$par,
+                                                predictor = c(preds.sub$temp_GS,preds.sub$RD_summer), #xxx list(preds.sub$temp_GS,preds.sub$RD_summer)
+                                                data = data.sub,
+                                                model = "SecondGen_PIA.models")
+
+## PIA+ model
+optimal_pars <- pr_fit_parameters(par = NULL,
+                                  predictor = preds.sub$cA_tot,
+                                  data = data.sub,
+                                  cost = rmse,
+                                  model = "SecondGen_PIA.models",
+                                  method = "GenSA",
+                                  lower = c(11,0.02,100,0,0),
+                                  upper = c(16,0.1,250,300,1),
+                                  control = list(max.call = 40000))
+
+opt_pars.sub$`Pbase_PIA+` <- optimal_pars$par[1]
+opt_pars.sub$`a_PIA+` <- optimal_pars$par[2]
+opt_pars.sub$`b_PIA+` <- optimal_pars$par[3]
+opt_pars.sub$`c_PIA+` <- optimal_pars$par[4]
+opt_pars.sub$`d_PIA+` <- optimal_pars$par[5]
+opt_pars.sub$`RMSE_PIA+` <- optimal_pars$value
+DoYoff_Preds.sub$`Pred_DoYoff_PIA+` <- pr_predict(par = optimal_pars$par,
+                                                  predictor = preds.sub$cA_tot,
+                                                  data = data.sub,
+                                                  model = "SecondGen_PIA.models")
+
+# Autumn anomalies
+DoYoff_Preds.sub$meansite_DoYoff <- mean(data.sub$transition_dates)
+DoYoff_Preds.sub$Obs_AnomDoYoff <- data.sub$transition_dates - DoYoff_Preds.sub$meansite_DoYoff
+DoYoff_Preds.sub$Preds_AnomDoYoff_TPM <- DoYoff_Preds.sub$Pred_DoYoff_TPM - DoYoff_Preds.sub$meansite_DoYoff
+DoYoff_Preds.sub$Preds_AnomDoYoff_TPDM <- DoYoff_Preds.sub$Pred_DoYoff_TPDM - DoYoff_Preds.sub$meansite_DoYoff
+DoYoff_Preds.sub$`Preds_AnomDoYoff_PIA+` <- DoYoff_Preds.sub$`Pred_DoYoff_PIA+` - DoYoff_Preds.sub$meansite_DoYoff
+
+DoYoff_Preds.df <- DoYoff_Preds.sub
+opt_pars.df <- opt_pars.sub
+
+save(DoYoff_Preds.df, file = "output/DoYoff_Preds.df_1_Fagus_sylvatica.RData")
+save(opt_pars.df, file = "output/opt_pars.df_1_Fagus_sylvatica.RData")
+```
+
+### FIGURE 3A Observed (Obs_AnomDoYoff) vs.Predicted (Pred_AnomDoYoff) for a timeseries
+
+Observed versus predicted autumn senescence dates for a timeseries (Site 1 - Fagus sylvatica) calibration.
+
+```{r,include=FALSE, eval=TRUE}
+
+# Loading calibration outputs for one timeseries
+load("output/DoYoff_Preds.df_1_Fagus_sylvatica.RData")
+DoYoff_Preds.df_site_species <- DoYoff_Preds.df
+
+PlotTPM <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = Preds_AnomDoYoff_TPM, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted calibration") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model TPM")
+
+PlotTPDM <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = Preds_AnomDoYoff_TPDM, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted calibration") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model TPDM")
+
+PlotPIAplus <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = `Preds_AnomDoYoff_PIA+`, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted calibration") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model PIA+")
+
+```
+
+```{r,echo=FALSE, fig.height=4,fig.width=12, eval=TRUE}
+
+ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
+
+```
+
+Observed versus predicted autumn senescence dates for a timeseries (Site 1 - Fagus sylvatica) calibration from Zani et al. repository in Zenodo.
+
+```{r,include=FALSE, eval=TRUE}
+
+# Reading sample outputs from Zani et al. for predictions
+pred_DoYoff <- data.table::fread("output/ModelAnalysis_1_Predicted_DoYoff_subset.csv") 
+subsetPred_1 <- subset(pred_DoYoff, timeseries=="1_Fagus sylvatica")
+
+PlotTPM <- ggplot(data = subsetPred_1, aes(x = Pred_AnomDoYoff_TPM, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted Zani et al.") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model TPM")
+
+PlotTPDM <- ggplot(data = subsetPred_1, aes(x = Pred_AnomDoYoff_TPDM, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted Zani et al") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model TPDM")
+
+PlotPIAplus <- ggplot(data = subsetPred_1, aes(x = `Pred_AnomDoYoff_PIA+`, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted Zani et al") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model PIA+")
+
+```
+
+```{r,echo=FALSE, fig.height=4,fig.width=12, eval=TRUE}
+
+ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
+
+```
+
+## Site-species (timeseries) calibration using the phenor package Ex. 2 - 1_Quercus_robur
+
+### Select a timeseries (site-species calibration)
+```{r, include=FALSE, eval=TRUE}
+args = commandArgs(trailingOnly=TRUE)
+
+# Select a timeseries
+args <- as.character(df_tseries_id$idx[which(df_tseries_id$timeseries == "1_Quercus_robur")]) # args <- c("2262") 
+
+##------------------------------------------
+## given timeseries number, determine species and pep_id given args[1]
+##------------------------------------------
+df_tmp <- df_tseries_id %>% 
+  dplyr::filter(idx == as.integer(args[1]))
+  
+sp <- df_tmp %>% pull(Species)
+site <- df_tmp %>% pull(PEP_ID)
+```
+
+### Estimate model parameters and predictions
+```{r, include=FALSE, eval=TRUE}
+##------------------------------------------
+## Predictions
+##------------------------------------------
+
+# Subset according to timeseries
+ts <- paste0(site,"_",sp) 
+data.sub <- DataList[[sp]][[as.character(site)]] 
+preds.sub <- preds.df %>% dplyr::filter(timeseries==ts)
+
+# Initialize sub-dataframes to store results
+DoYoff_Preds.sub <- data.frame(timeseries=data.sub$site, Species=sp, YEAR=data.sub$year)
+DoYoff_Preds.sub$Obs_DoYoff <- data.sub$transition_dates
+opt_pars.sub <- data.frame(timeseries=ts, Species=sp, PEP_ID=site) 
+
+## TPM model
+optimal_pars <- pr_fit_parameters(par = NULL,
+                                  data = data.sub,
+                                  cost = rmse,
+                                  model = "TPM.model",
+                                  method = "GenSA",
+                                  lower = c(11,0.02,100,0),
+                                  upper = c(16,0.1,250,200),
+                                  control = list(max.call = 40000))
+opt_pars.sub$Pbase_TPM <- optimal_pars$par[1]
+opt_pars.sub$a_TPM <- optimal_pars$par[2]
+opt_pars.sub$b_TPM <- optimal_pars$par[3]
+opt_pars.sub$Fcrit_TPM <- optimal_pars$par[4]
+opt_pars.sub$RMSE_TPM <- optimal_pars$value
+DoYoff_Preds.sub$Pred_DoYoff_TPM <- pr_predict(par = optimal_pars$par,
+                                               data = data.sub,
+                                               model = "TPM.model")
+
+## TPDM model
+optimal_pars <- pr_fit_parameters(par = NULL,
+                                  predictor = c(preds.sub$temp_GS,preds.sub$RD_summer), #xxx list(preds.sub$temp_GS,preds.sub$RD_summer)
+                                  data = data.sub,
+                                  cost = rmse,
+                                  model = "SecondGen_PIA.models",
+                                  method = "GenSA",
+                                  lower = c(11,0.02,100,0,0,0),
+                                  upper = c(16,0.1,250,300,1,1),
+                                  control = list(max.call = 40000))
+opt_pars.sub$Pbase_TPDM <- optimal_pars$par[1]
+opt_pars.sub$a_TPDM <- optimal_pars$par[2]
+opt_pars.sub$b_TPDM <- optimal_pars$par[3]
+opt_pars.sub$c_TDPM <- optimal_pars$par[4]
+opt_pars.sub$d_TPDM <- optimal_pars$par[5]
+opt_pars.sub$e_TPDM <- optimal_pars$par[6]
+opt_pars.sub$RMSE_TPDM <- optimal_pars$value
+DoYoff_Preds.sub$Pred_DoYoff_TPDM <- pr_predict(par = optimal_pars$par,
+                                                predictor = c(preds.sub$temp_GS,preds.sub$RD_summer), #xxx list(preds.sub$temp_GS,preds.sub$RD_summer)
+                                                data = data.sub,
+                                                model = "SecondGen_PIA.models")
+
+## PIA+ model
+optimal_pars <- pr_fit_parameters(par = NULL,
+                                  predictor = preds.sub$cA_tot,
+                                  data = data.sub,
+                                  cost = rmse,
+                                  model = "SecondGen_PIA.models",
+                                  method = "GenSA",
+                                  lower = c(11,0.02,100,0,0),
+                                  upper = c(16,0.1,250,300,1),
+                                  control = list(max.call = 40000))
+opt_pars.sub$`Pbase_PIA+` <- optimal_pars$par[1]
+opt_pars.sub$`a_PIA+` <- optimal_pars$par[2]
+opt_pars.sub$`b_PIA+` <- optimal_pars$par[3]
+opt_pars.sub$`c_PIA+` <- optimal_pars$par[4]
+opt_pars.sub$`d_PIA+` <- optimal_pars$par[5]
+opt_pars.sub$`RMSE_PIA+` <- optimal_pars$value
+DoYoff_Preds.sub$`Pred_DoYoff_PIA+` <- pr_predict(par = optimal_pars$par,
+                                                  predictor = preds.sub$cA_tot,
+                                                  data = data.sub,
+                                                  model = "SecondGen_PIA.models")
+
+# Autumn anomalies
+DoYoff_Preds.sub$meansite_DoYoff <- mean(data.sub$transition_dates)
+DoYoff_Preds.sub$Obs_AnomDoYoff <- data.sub$transition_dates - DoYoff_Preds.sub$meansite_DoYoff
+DoYoff_Preds.sub$Preds_AnomDoYoff_TPM <- DoYoff_Preds.sub$Pred_DoYoff_TPM - DoYoff_Preds.sub$meansite_DoYoff
+DoYoff_Preds.sub$Preds_AnomDoYoff_TPDM <- DoYoff_Preds.sub$Pred_DoYoff_TPDM - DoYoff_Preds.sub$meansite_DoYoff
+DoYoff_Preds.sub$`Preds_AnomDoYoff_PIA+` <- DoYoff_Preds.sub$`Pred_DoYoff_PIA+` - DoYoff_Preds.sub$meansite_DoYoff
+
+DoYoff_Preds.df <- DoYoff_Preds.sub
+opt_pars.df <- opt_pars.sub
+
+save(DoYoff_Preds.df, file = "output/DoYoff_Preds.df_1_Quercus_robur.RData")
+save(opt_pars.df, file = "output/opt_pars.df_1_Quercus_robur.RData")
+```
+
+### FIGURE 3A Observed (Obs_AnomDoYoff) vs.Predicted (Pred_AnomDoYoff) for a timeseries
+
+#### Observed versus predicted autumn senescence dates for a timeseries (Site 1 - Quercus robur) calibration.
+
+```{r,include=FALSE, eval=TRUE}
+
+# Loading calibration outputs for one timeseries
+load("output/DoYoff_Preds.df_1_Quercus_robur.RData")
+DoYoff_Preds.df_site_species <- DoYoff_Preds.df
+
+PlotTPM <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = Preds_AnomDoYoff_TPM, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted calibration") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model TPM")
+
+PlotTPDM <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = Preds_AnomDoYoff_TPDM, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted calibration") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model TPDM")
+
+PlotPIAplus <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = `Preds_AnomDoYoff_PIA+`, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted calibration") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model PIA+")
+
+```
+
+```{r,echo=FALSE, fig.height=4,fig.width=12, eval=TRUE}
+
+ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
+
+```
+
+Observed versus predicted autumn senescence dates for a timeseries (Site 1 - Quercus robur) calibration from Zani et al. repository in Zenodo.
+
+```{r,include=FALSE, eval=TRUE}
+
+# Reading sample outputs from Zani et al. for predictions
+pred_DoYoff <- data.table::fread("output/ModelAnalysis_1_Predicted_DoYoff_subset.csv") 
+subsetPred_2 <- subset(pred_DoYoff, timeseries=="1_Quercus robur")
+
+PlotTPM <- ggplot(data = subsetPred_2, aes(x = Pred_AnomDoYoff_TPM, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted Zani et al.") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model TPM")
+
+PlotTPDM <- ggplot(data = subsetPred_2, aes(x = Pred_AnomDoYoff_TPDM, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted Zani et al") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model TPDM")
+
+PlotPIAplus <- ggplot(data = subsetPred_2, aes(x = `Pred_AnomDoYoff_PIA+`, y = Obs_AnomDoYoff)) + geom_point() + 
+  scale_x_continuous("Predicted Zani et al") + scale_y_continuous("Observed") + theme_classic() + ggtitle("Model PIA+")
+
+```
+
+```{r,echo=FALSE, fig.height=4,fig.width=12, eval=TRUE}
+
+ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
+
+```
