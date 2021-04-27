@@ -208,7 +208,7 @@ optimal_pars <- optimize_parameters(par = NULL,
                                   method = "GenSA",
                                   lower = c(11,0.02,100,0),
                                   upper = c(16,0.1,250,200),
-                                  control = list(max.call = 40000))
+                                  control = list(max.call = 120000)) # Run for longer 120000 instead of 40000
 opt_pars.sub$Pbase_TPM <- optimal_pars$par[1]
 opt_pars.sub$a_TPM <- optimal_pars$par[2]
 opt_pars.sub$b_TPM <- optimal_pars$par[3]
@@ -226,9 +226,9 @@ optimal_pars <- optimize_parameters(par = NULL,
                                   cost = rmse,
                                   model = "SecondGen_PIA.models",
                                   method = "GenSA",
-                                  lower = c(11,0.02,100,0,0,0),
-                                  upper = c(16,0.1,250,300,1,1),
-                                  control = list(max.call = 80000))
+                                  lower = c(11,0.02,100,0,-10,-10),  # Expand the interval range for d_TPDM and e_TPDM c(11,0.02,100,0,0,0),
+                                  upper = c(16,0.1,250,300,10,10),   # Expand the interval range for d_TPDM and e_TPDM c(16,0.1,250,300,1,1),
+                                  control = list(max.call = 120000)) # Run for longer 120000 instead of 40000
 opt_pars.sub$Pbase_TPDM <- optimal_pars$par[1]
 opt_pars.sub$a_TPDM <- optimal_pars$par[2]
 opt_pars.sub$b_TPDM <- optimal_pars$par[3]
@@ -248,9 +248,9 @@ optimal_pars <- optimize_parameters(par = NULL,
                                   cost = rmse,
                                   model = "SecondGen_PIA.models",
                                   method = "GenSA",
-                                  lower = c(11,0.02,100,0,0),
-                                  upper = c(16,0.1,250,300,1),
-                                  control = list(max.call = 40000))
+                                  lower = c(11,0.02,100,0,-10),      # Expand the interval range for `d_PIA+ c(11,0.02,100,0,0,0),
+                                  upper = c(16,0.1,250,300,10),      # Expand the interval range for `d_PIA+ c(16,0.1,250,300,1,1),
+                                  control = list(max.call = 120000)) # Run for longer 120000 instead of 40000
 opt_pars.sub$`Pbase_PIA+` <- optimal_pars$par[1]
 opt_pars.sub$`a_PIA+` <- optimal_pars$par[2]
 opt_pars.sub$`b_PIA+` <- optimal_pars$par[3]
@@ -345,7 +345,7 @@ PlotPIAplus <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = `Preds_AnomDo
 ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 ```
 
-c) These figures plot predictions from calibration using the phenor pck functions vs. predictions provided by Zani et al. in Zenodo.
+c) These figures plot predictions provided by Zani et al. in Zenodo vs. predictions from calibration using the phenor pck functions.
 
 ```{r, include=FALSE, eval=TRUE}
 
@@ -358,13 +358,22 @@ load("~/pep/calibration/output/DoYoff_Preds.df_1_Fagus_sylvatica.RData")
 DoYoff_Preds.df_site_species <- DoYoff_Preds.df
 
 PlotTPM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPM, y = subsetPred_1$Pred_DoYoff_TPM), aes(x = x, y = y)) + geom_point() + 
-  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPM predictions")
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() +
+  labs(title = "Zani et al. predictions vs. timeseries predictions",
+              subtitle = "Model TPM",
+              caption = "")
 
 PlotTPDM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPDM, y = subsetPred_1$Pred_DoYoff_TPDM), aes(x = x, y = y)) + geom_point() + 
-  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPDM predictions")
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model TPDM",
+              caption = "")
 
 PlotPIAplus <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$`Pred_DoYoff_PIA+`, y = subsetPred_1$`Pred_DoYoff_PIA+`), aes(x = x, y = y)) + geom_point() + 
-  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("PIA+ predictions")
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model PIA+",
+              caption = "")
 
 ```
 
@@ -423,7 +432,7 @@ optimal_pars <- optimize_parameters(par = NULL,
                                   method = "GenSA",
                                   lower = c(11,0.02,100,0),
                                   upper = c(16,0.1,250,200),
-                                  control = list(max.call = 40000))
+                                  control = list(max.call = 120000)) # Run for longer 120000 instead of 40000
 opt_pars.sub$Pbase_TPM <- optimal_pars$par[1]
 opt_pars.sub$a_TPM <- optimal_pars$par[2]
 opt_pars.sub$b_TPM <- optimal_pars$par[3]
@@ -441,9 +450,9 @@ optimal_pars <- optimize_parameters(par = NULL,
                                   cost = rmse,
                                   model = "SecondGen_PIA.models",
                                   method = "GenSA",
-                                  lower = c(11,0.02,100,0,0,0),
-                                  upper = c(16,0.1,250,300,1,1),
-                                  control = list(max.call = 40000))
+                                  lower = c(11,0.02,100,0,-10,-10),  # Expand the interval range for d_TPDM and e_TPDM c(11,0.02,100,0,0,0),
+                                  upper = c(16,0.1,250,300,10,10),   # Expand the interval range for d_TPDM and e_TPDM c(16,0.1,250,300,1,1),
+                                  control = list(max.call = 120000)) # Run for longer 120000 instead of 40000
 opt_pars.sub$Pbase_TPDM <- optimal_pars$par[1]
 opt_pars.sub$a_TPDM <- optimal_pars$par[2]
 opt_pars.sub$b_TPDM <- optimal_pars$par[3]
@@ -463,9 +472,9 @@ optimal_pars <- optimize_parameters(par = NULL,
                                   cost = rmse,
                                   model = "SecondGen_PIA.models",
                                   method = "GenSA",
-                                  lower = c(11,0.02,100,0,0),
-                                  upper = c(16,0.1,250,300,1),
-                                  control = list(max.call = 40000))
+                                  lower = c(11,0.02,100,0,-10),      # Expand the interval range for `d_PIA+ c(11,0.02,100,0,0,0),
+                                  upper = c(16,0.1,250,300,10),      # Expand the interval range for `d_PIA+ c(16,0.1,250,300,1,1),
+                                  control = list(max.call = 120000)) # Run for longer 120000 instead of 40000
 opt_pars.sub$`Pbase_PIA+` <- optimal_pars$par[1]
 opt_pars.sub$`a_PIA+` <- optimal_pars$par[2]
 opt_pars.sub$`b_PIA+` <- optimal_pars$par[3]
@@ -560,7 +569,7 @@ PlotPIAplus <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = `Preds_AnomDo
 ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 ```
 
-c) These figures plot predictions from calibration using the phenor pck functions vs. predictions provided by Zani et al. in Zenodo.
+c) These figures plot predictions provided by Zani et al. in Zenodo vs. predictions from calibration using the phenor pck functions.
 
 ```{r, include=FALSE, eval=TRUE}
 
@@ -573,13 +582,22 @@ load("~/pep/calibration/output/DoYoff_Preds.df_1_Quercus_robur.RData")
 DoYoff_Preds.df_site_species <- DoYoff_Preds.df
 
 PlotTPM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPM, y = subsetPred_1$Pred_DoYoff_TPM), aes(x = x, y = y)) + geom_point() + 
-  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPM predictions")
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() +
+  labs(title = "Zani et al. predictions vs. timeseries predictions",
+              subtitle = "Model TPM",
+              caption = "")
 
 PlotTPDM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPDM, y = subsetPred_1$Pred_DoYoff_TPDM), aes(x = x, y = y)) + geom_point() + 
-  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPDM predictions")
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model TPDM",
+              caption = "")
 
 PlotPIAplus <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$`Pred_DoYoff_PIA+`, y = subsetPred_1$`Pred_DoYoff_PIA+`), aes(x = x, y = y)) + geom_point() + 
-  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("PIA+ predictions")
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model PIA+",
+              caption = "")
 
 ```
 
@@ -638,7 +656,7 @@ optimal_pars <- optimize_parameters(par = NULL,
                                   method = "GenSA",
                                   lower = c(11,0.02,100,0),
                                   upper = c(16,0.1,250,200),
-                                  control = list(max.call = 40000))
+                                  control = list(max.call = 120000)) # Run for longer 120000 instead of 40000
 opt_pars.sub$Pbase_TPM <- optimal_pars$par[1]
 opt_pars.sub$a_TPM <- optimal_pars$par[2]
 opt_pars.sub$b_TPM <- optimal_pars$par[3]
@@ -656,9 +674,9 @@ optimal_pars <- optimize_parameters(par = NULL,
                                   cost = rmse,
                                   model = "SecondGen_PIA.models",
                                   method = "GenSA",
-                                  lower = c(11,0.02,100,0,0,0),
-                                  upper = c(16,0.1,250,300,1,1),
-                                  control = list(max.call = 40000))
+                                  lower = c(11,0.02,100,0,-10,-10),  # Expand the interval range for d_TPDM and e_TPDM c(11,0.02,100,0,0,0),
+                                  upper = c(16,0.1,250,300,10,10),   # Expand the interval range for d_TPDM and e_TPDM c(16,0.1,250,300,1,1),
+                                  control = list(max.call = 120000)) # Run for longer 120000 instead of 40000
 opt_pars.sub$Pbase_TPDM <- optimal_pars$par[1]
 opt_pars.sub$a_TPDM <- optimal_pars$par[2]
 opt_pars.sub$b_TPDM <- optimal_pars$par[3]
@@ -678,9 +696,9 @@ optimal_pars <- optimize_parameters(par = NULL,
                                   cost = rmse,
                                   model = "SecondGen_PIA.models",
                                   method = "GenSA",
-                                  lower = c(11,0.02,100,0,0),
-                                  upper = c(16,0.1,250,300,1),
-                                  control = list(max.call = 40000))
+                                  lower = c(11,0.02,100,0,-10),      # Expand the interval range for `d_PIA+ c(11,0.02,100,0,0,0),
+                                  upper = c(16,0.1,250,300,10),      # Expand the interval range for `d_PIA+ c(16,0.1,250,300,1,1),
+                                  control = list(max.call = 120000)) # Run for longer 120000 instead of 40000
 opt_pars.sub$`Pbase_PIA+` <- optimal_pars$par[1]
 opt_pars.sub$`a_PIA+` <- optimal_pars$par[2]
 opt_pars.sub$`b_PIA+` <- optimal_pars$par[3]
@@ -775,7 +793,7 @@ PlotPIAplus <- ggplot(data = DoYoff_Preds.df_site_species, aes(x = `Preds_AnomDo
 ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 ```
 
-c) These figures plot predictions from calibration using the phenor pck functions vs. predictions provided by Zani et al. in Zenodo.
+c) These figures plot predictions provided by Zani et al. in Zenodo vs. predictions from calibration using the phenor pck functions.
 
 ```{r, include=FALSE, eval=TRUE}
 
@@ -788,13 +806,22 @@ load("~/pep/calibration/output/DoYoff_Preds.df_1002_Aesculus_hippocastanum.RData
 DoYoff_Preds.df_site_species <- DoYoff_Preds.df
 
 PlotTPM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPM, y = subsetPred_1$Pred_DoYoff_TPM), aes(x = x, y = y)) + geom_point() + 
-  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPM predictions")
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() +
+  labs(title = "Zani et al. predictions vs. timeseries predictions",
+              subtitle = "Model TPM",
+              caption = "")
 
 PlotTPDM <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$Pred_DoYoff_TPDM, y = subsetPred_1$Pred_DoYoff_TPDM), aes(x = x, y = y)) + geom_point() + 
-  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("TPDM predictions")
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model TPDM",
+              caption = "")
 
 PlotPIAplus <- ggplot(data = data.frame(x = DoYoff_Preds.df_site_species$`Pred_DoYoff_PIA+`, y = subsetPred_1$`Pred_DoYoff_PIA+`), aes(x = x, y = y)) + geom_point() + 
-  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() + ggtitle("PIA+ predictions")
+  scale_x_continuous("Calibration") + scale_y_continuous("Zani et al.") + theme_classic() +
+  labs(title = "",
+              subtitle = "Model PIA+",
+              caption = "")
 
 ```
 
