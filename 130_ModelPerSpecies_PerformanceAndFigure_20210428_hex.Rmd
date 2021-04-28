@@ -1,0 +1,276 @@
+---
+title: "Performance & Plots of Models calibrated per Species"
+author: "Michael Meier"
+date: "28 04 2021"
+output: pdf_document
+---
+
+```{r setup, include = F}
+knitr::opts_chunk$set(echo = T)
+```
+
+>Here we derive the RMSE and R2 from calibration sets applied to estimate the parameters of the mechanistic models calibrated per species with the phenoR package. Thus, we draw figure 2.
+
+```{r, include = F, echo = T}
+rm(list = ls())
+
+# Define path
+myData   <- "../30_OurData/30_ModelCalibrations/CZ/"
+```
+
+# Preparing environment
+
+```{r, include = T, echo = T}
+# Load libraries
+library(data.table)
+library(hydroGOF)
+library(ggplot2)
+library(ggsci)
+library(RColorBrewer)
+library(grid)
+library(ggplotify)
+library(tidyverse)
+library(ggpubr)
+library(cowplot)
+
+##----------------------------------------
+## Define factor levels
+mySpcLvl <- data.table(Abbr = c("FaSy", "QuRo", "AeHi", "BePe", "SoAu", "LaDe"),
+                       Name = c("Fagus sylvatica", "Quercus robur", "Aesculus hippocastanum",
+                                "Betula pendula", "Sorbus aucuparia", "Larix decidua"))
+myModLvl <- c("CDD", "DM1", "DM2", "TPM", "SIAM", "TDM", "TPDM", "PIAgsi", "PIAmns", "PIApls")
+
+##----------------------------------------
+## Import data
+pred_DoYoff <- fread(paste0(myData, "CalibLcDoy_PerSpc_acc_Drivers_selectedBBCH_CZ_20210316.csv"))
+
+pred_DoYoff <- pred_DoYoff[Model != "PIAmns",]
+```
+
+# Calculating RMSE
+
+```{r, include = T, echo = T}
+pred_DoYoff <- pred_DoYoff[, ":=" (MeanSpc.obs = mean(DOYobs), 
+                                   AnmlSpc.obs = DOYobs - mean(DOYobs), 
+                                   AnmlSpc.mod = DOYmod - mean(DOYobs)), 
+                           by = .(Spec, Model)]
+
+## RMSE
+pred_Stats <- unique(copy(pred_DoYoff)[!is.na(DOYmod),
+                                       ][, ":=" (RMSE  = rmse(DOYmod, DOYobs, na.rm = T),
+                                                 RMSE0 = rmse(MeanSpc.obs, DOYobs, na.rm = T),
+                                                 N     = .N),
+                                         by = .(Spec, Model),
+                                         ][, .(Spec, SpecName, Stat, Model, 
+                                               N, RMSE, RMSE0)])
+
+pred_Stats <- pred_Stats[, ":=" (Spec     = factor(Spec, levels = mySpcLvl$Abbr),
+                                 SpecName = factor(SpecName, levels = mySpcLvl$Name),
+                                 Model    = factor(Model, levels = myModLvl))
+                         ][, Generation := factor(ifelse(grepl("PIA", Model), "3rd Gen.",
+                                                         ifelse(Model %in% c("SIAM", "TDM", "TPDM"),
+                                                                "2nd Gen.",
+                                                                "1st Gen.")),
+                                                  levels = c("1st Gen.", "2nd Gen.", "3rd Gen."))]
+```
+
+# Boxplots
+
+```{r, include = T, echo = T}
+pred_Stats <- pred_Stats[, SpecN := paste0(SpecName, " (N: ", N, ")")]
+
+pRMSE.woS <- ggplot(data = unique(pred_Stats[,.(Species = SpecN, Model, N, RMSE, Generation)])) +
+  geom_hline(yintercept = median(pred_Stats$RMSE0), size = 0.5, 
+             linetype = "solid", colour = "black") +
+  geom_boxplot(aes(y = RMSE, x = Model, col = Generation), 
+               outlier.size = 0.5, fill = "grey75") +
+  scale_colour_manual(values = c("steelblue3", "darkorange1", "darkolivegreen4"),
+                      name = "Type",
+                      labels = c(expression("1"^"st"*" generation"), 
+                                 expression("2"^"nd"*" generation"), "PIA models")) +
+  labs(y = "Root Mean Square Error") +
+  scale_x_discrete(labels = c("CDD" = "CDD", "DM1" = "DM1", "DM2" = "DM2", "TPM" = "TPM", 
+                              "SIAM" = "SIAM", "TDM" = "TDM", "TPDM" = "TPDM", 
+                              "PIAgsi" = expression("PIA"["GSI"]), 
+                              "PIApls" = expression ("PIA"^"+"))) + 
+  theme_classic() +
+  theme(axis.title.x = element_blank(), axis.text.x = element_text(size = 6),
+        axis.title.y = element_text(size = 6), axis.text.y = element_text(size = 6),
+        legend.title = element_blank(), legend.text = element_text(size = 6), 
+        legend.position = "bottom",
+        plot.margin = margin(t = 0, r = 0, b = 0.5, l = 0.5, unit = "cm"))
+
+```
+
+# Scatter plots
+
+```{r, include = T, echo = T}
+pred_DoYoff <- pred_DoYoff[, Generation := factor(ifelse(grepl("PIA", Model), "3rd Gen.",
+                                                         ifelse(Model %in% 
+                                                                  c("SIAM", "TDM", "TPDM"),
+                                                                "2nd Gen.",
+                                                                "1st Gen.")),
+                                                  levels = c("1st Gen.", "2nd Gen.", "3rd Gen."))]
+
+#
+myLine <- NULL
+for (i in unique(pred_DoYoff$Model)) {
+  myLM <- lm(AnmlSpc.mod ~ AnmlSpc.obs, data = pred_DoYoff[Model == i], na.action = "na.omit")
+  myLine <- rbind(myLine,
+                  data.table(Model = i, 
+                             b0 = myLM$coefficients[1], 
+                             b1 = myLM$coefficients[2], 
+                             r2 = summary(myLM)$r.squared))
+}
+rm(i)
+
+myLine <- unique(copy(pred_Stats)[ ,.(Model, RMSE)
+                                   ][ , RMSE := median(RMSE), by = .(Model)]
+                 )[myLine, on = .(Model)]
+
+myLine <- myLine[Model %in% c("TPM", "TPDM", "PIApls"),
+                 ][, Model := factor(Model, levels = c("TPM", "TPDM", "PIApls"), 
+                                     labels = c("TPM", "TPDM", expression("PIA"^"+")))]
+
+#
+myDat <- copy(pred_DoYoff)[Model %in% c("TPM", "TPDM", "PIApls") & !is.na(DOYmod)]
+myDat <- myDat[, Model := factor(Model, levels = c("TPM", "TPDM", "PIApls"), 
+                                 labels = c("TPM", "TPDM", expression("PIA"^"+")))]
+
+#
+myLim <- ceiling(max(abs(range(c(myDat$AnmlSpc.obs, myDat$AnmlSpc.mod)))))
+myLim <- c(-myLim, myLim)
+
+#
+pQQ.h <- ggplot(data = myDat) +
+  geom_abline(intercept = 0, slope = 1, 
+              colour = "grey50", linetype = "dotted", size = 0.35) +
+  geom_hex(data = myDat,
+           aes(y = AnmlSpc.mod, x = AnmlSpc.obs),
+           bins = 100, size = 0.25, alpha = 1) +
+  geom_abline(data = myLine, 
+              aes(intercept = b0, slope = b1, group = Model),
+              colour = "black", linetype = "solid", size = 0.5) +
+  scale_fill_gradientn(colours = colorRampPalette(c("gray65", "blue", "white", "red"))(5),
+                       trans = "log", breaks = c(1, 10, 100, 1000, 10000),
+                       name = "Count") + 
+  coord_fixed(ratio = 1, xlim = myLim, ylim = myLim) +
+  annotate(geom = "text",
+           x = -65,
+           y = 65,
+           label = "RMSE\nR\u00B2",
+           size = 1.75, hjust = "left", vjust = "top") + # same as hjust = 0
+  annotate(geom = "text",
+           x = -35,
+           y = 65,
+           label = ":\n:",
+           size = 1.75, hjust = "left", vjust = "top") + # same as hjust = 0
+  geom_text(data = myLine,
+            mapping = aes(
+              x = -5,
+              y = 65,
+              label = paste0(sprintf("%.2f", round(RMSE, digits = 2)),
+                             "\n",
+                             sprintf("%.2f", round(r2, digits = 2)))),
+            size = 1.75, hjust = "right", vjust = "top") + # same as hjust = 0
+  labs(x = "Modelled autumn anomaly",
+       y = "Observed autumn anomaly\n") +
+  facet_grid(cols = vars(Model), labeller = "label_parsed") + 
+  theme_classic() +
+  theme(axis.title.x = element_text(size = 6), 
+        axis.title.y = element_text(size = 6, margin = margin(l = 0.5, unit = "line")), 
+        axis.text = element_text(size = 6),
+        legend.title = element_text(size = 4.5, face = "bold"), 
+        legend.text = element_text(size = 4.5),
+        legend.key.size = unit(0.5, "line"), 
+        #legend.key.width = unit(0.5,"cm"), legend.key.height = unit(1.5,"cm"), 
+        legend.justification = c(1, 0), legend.position = c(1, 0),
+        legend.margin = margin(t = 0, r = 0.1, b = 0, l = 0, unit = "line"), 
+        strip.text = element_text(size = 7, face = "bold", colour = "white"),
+        plot.margin = margin(t = 0, r = 0, b = 0, l = 0.5, unit = "cm"))
+
+gQQ.h <- ggplot_gtable(ggplot_build(pQQ.h))
+stripr <- which(grepl('strip-t', gQQ.h$layout$name))
+fills <- c("steelblue3", "darkorange1", "darkolivegreen4")
+k <- 1
+for (i in stripr) {
+  j <- which(grepl('rect', gQQ.h$grobs[[i]]$grobs[[1]]$childrenOrder))
+  gQQ.h$grobs[[i]]$grobs[[1]]$children[[j]]$gp$fill <- fills[k]
+  k <- k+1
+}
+
+qQQ.h <- as_ggplot(gQQ.h)
+
+```
+
+# Bar plots
+
+```{r, include = T, echo = T}
+myLine <- NULL
+for (i in unique(pred_DoYoff$Model)) {
+  myLM <- lm(AnmlSpc.mod ~ AnmlSpc.obs, data = pred_DoYoff[Model == i], na.action = "na.omit")
+  myLine <- rbind(myLine,
+                  data.table(Model = i, 
+                             b0 = myLM$coefficients[1], 
+                             b1 = myLM$coefficients[2], 
+                             r2 = summary(myLM)$r.squared))
+}
+rm(i)
+
+myLine <- myLine[, ":=" (Model      = factor(Model, levels = myModLvl),
+                         Generation = factor(ifelse(grepl("PIA", Model), "3rd Gen.",
+                                                    ifelse(Model %in% c("SIAM", "TDM", "TPDM"),
+                                                           "2nd Gen.",
+                                                           "1st Gen.")),
+                                             levels = c("1st Gen.", "2nd Gen.", "3rd Gen.")))]
+
+pBar <- ggplot(data = myLine) +
+  geom_col(aes(x = Model, y = r2, fill = Generation), size = 0.75) +
+  scale_fill_manual(values = c("steelblue3", "darkorange1", "darkolivegreen4"),
+                    name = "Generation",
+                    labels = c("1st", "2nd", "3rd")) +
+  ylab(expression("Coefficient of determinatoin (R"^"2"*")")) + 
+  ylim(c(0,1)) +
+  theme_classic() +
+  theme(axis.title.x = element_blank(), axis.text.x = element_blank(),
+        axis.title.y = element_text(size = 6), axis.text.y = element_text(size = 6),
+        legend.title = element_text(size = 4.5, face = "bold"),
+        legend.text = element_text(size = 4.5),
+        plot.margin = margin(t = 0, r = 0, b = 0.5, l = 0.5, unit = "cm"))
+
+```
+
+# Finalising figure for publication
+
+```{r, include = T, echo = T}
+f <- ggarrange(gQQ.h,
+               ggarrange(pBar + theme(legend.position = "none"),
+                         pRMSE.woS + theme(legend.position = "bottom"),
+                         nrow = 2,
+                         heights = c(1, 1.6),
+                         align = "v",
+                         labels = c("B", "C"),
+                         hjust = rep(-0.05, 2),
+                         vjust = rep(0.75, 2)),
+               nrow = 2,
+               heights = c(1.2, 2),
+               labels = c("A", NA),
+               hjust = rep(-0.05, 2),
+               vjust = rep(1, 2))
+
+ggsave(plot = f, filename = paste0(myData, "QQ_R2_RMSE_hex_300dpi_",
+                                   format(Sys.Date(), "%Y%m%d"), ".png"),
+       width = 12, height = 12.75, units = "cm", dpi = 300) #, dpi = 1000)
+
+ggsave(plot = f, filename = paste0(myData, "QQ_R2_RMSE_hex_",
+                                   format(Sys.Date(), "%Y%m%d"), ".svg"),
+       width = 12, height = 12.75, units = "cm")
+
+```
+
+```{r, include = T, echo = F, fig.dim = c(12/2.54, 12.75/2.54), fig.align = "center"}
+f
+
+```
+
+> Figure caption: Re-assessment of the performance of the EOS phenology models based on species-specific model fits. (A) Observed versus predicted autumn senescence anomalies of the three models displayed by Zani et al. (their Fig. 3A). Solid lines show linear regression fit; dashed lines show the 1:1 line. (B and C) Comparison of the nine models tested in this study. (B) Mean coefficient of determination (R2) of observed versus predicted senescence dates across the six species. (C) Distribution of RMSEs across the six species. The colored lines show the median RMSEs from the calibration; the black line shows the median RMSE expected under a null model in which senescence dates do not differ among years. Acronyms: CDD, Cold-degree-day model; DM, Delpierre model; TPM, Low Temperature and Photoperiod Multiplicative model; SIAM, Spring-influenced autumn phenology model; TDM, Temperature-influenced Delpierre model; TPDM, Temperature- and Precipitation-influenced Delpierre model, PIA, photosynthesis-influenced model.
