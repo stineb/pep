@@ -75,11 +75,12 @@ gg_dual <- ggplot_year_anet(out_plot_lt, out_plot_anet)
 ##----------------------------------------
 library(gtable)
 library(ggpubr)
+library(grid)
 
 gg_dual_L <- gg_dual +
   labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), 
        subtitle = "Zani et al.") +
-  theme(plot.title = element_text(colour = "royalblue"),
+  theme(plot.title = element_text(size = 12, colour = "royalblue"),
         plot.subtitle = element_text(face = "italic", colour = "royalblue"))
 
 g <- ggplotGrob(gg_dual_L)
@@ -90,7 +91,7 @@ myPos <- c(t = g$layout$t[which(g$layout$name == "title")],
            r = g$layout$r[which(g$layout$name == "title")])
 
 gg_dual_LR <- gtable_add_grob(g, textGrob(expression(paste(italic("A")[net], " + Year")),
-                                          gp = gpar(col = "tomato", fontface = "bold"),
+                                          gp = gpar(col = "tomato", fontsize = 12),
                                           x = 1, hjust = 1),
                               t = myPos["t"], l = myPos["l"], b = myPos["b"], r = myPos["r"], 
                               name = "right-title")
