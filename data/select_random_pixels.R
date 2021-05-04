@@ -1,21 +1,20 @@
 # Random pixel selection
 library(raster)
+library(spatstat)
 
 # load tif file
 r <- raster("data/land_cover/IGBP_DB_2010_2019_eroded.tif")
 
-# select locations
-locations <- sampleRandom(
-  r,
-  size = 10000, # retain 8K values roughly
-  xy = TRUE,
-  cell = TRUE)
+# export all DB pixel locations and save as RDS
+rr <- rasterToPoints(r, fun=function(x){x==4})
+rr <- rr[,1:2]
+saveRDS(rr, "data/locations.rds")
 
-# grab altitudes
+loc <- sample(1:nrow(rr), size = 8000)
+test <- rr[loc,]
 
-
-# grab Koeppen-geigen values
-
+# grab Koeppen-geiger values
+plot(test[,1],test[,2])
 
 
 
