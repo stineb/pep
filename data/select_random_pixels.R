@@ -12,10 +12,7 @@ saveRDS(rr, "data/locations.rds")
 
 # pseudo random locations
 loc <- sample(1:nrow(rr), size = 8000)
-test <- rr[loc,]
+ss <- rr[loc,]
 
-# grab Koeppen-geiger values
-plot(test[,1],test[,2], xlim = c(10, 20),ylim=c(40,50))
-
-
-
+# write subset to disk
+saveRDS(ss, "data/location_selection.rds")
