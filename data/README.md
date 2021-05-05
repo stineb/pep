@@ -34,7 +34,17 @@ Export.image.toDrive({
 
 ```
 gdalbuildvrt tmp.vrt *.tif
-gdalwarp -overwrite -multi -wo "NUM_THREADS=ALL_CPUS" -of GTiff -co "BIGTIFF=YES" -co "COMPRESS=DEFLATE" tmp.vrt  DB.tif
+gdalwarp -overwrite -multi -wo "NUM_THREADS=ALL_CPUS" -of GTiff -co "BIGTIFF=YES" -co "COMPRESS=DEFLATE" tmp.vrt  IGBP_DB_2010_2019.tif
+```
+
+## erode pixels
+
+```
+r <- raster("data/landcover/IGBP_DB_2010_2019.tif")
+r <- focal(r, w = matrix(1, nc = 3, nr = 3), mean, na.rm = FALSE)
+writeRaster(r, "data/land_cover/IGBP_DB_2010_2019_eroded.tif",
+            options="COMPRESS=DEFLATE", 
+            overwrite=TRUE)
 ```
 
 ## Land Cover
