@@ -2,7 +2,7 @@
 library(raster)
 
 # set land cover classes
-lc <- c("DB","DN")
+lc <- c("DN")
 
 # moving window analysis
 lapply(lc, function(cl){

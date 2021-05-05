@@ -10,12 +10,17 @@ lapply(lc, function(cl){
   r <- raster(sprintf("data/land_cover/IGBP_%s_2010_2019_eroded.tif",cl))
   
   # export all DB pixel locations and save as RDS
-  rr <- rasterToPoints(r, fun=function(x){x==4})
+  if(cl == "DB"){
+    rr <- rasterToPoints(r, fun=function(x){x==4})  
+  } else {
+    rr <- rasterToPoints(r, fun=function(x){x==3})
+  }
+  
   rr <- rr[,1:2]
   saveRDS(rr, sprintf("data/%s_locations.rds",cl))
   
   # pseudo random locations
-  loc <- sample(1:nrow(rr), size = 8000)
+  loc <- sample(1:nrow(rr), size = 10000)
   ss <- rr[loc,]
   
   # write subset to disk
