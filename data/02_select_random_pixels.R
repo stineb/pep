@@ -13,9 +13,9 @@ classes <- c(11:16, 20:28)
 # Filter on KG classes, and group by IGBP vegetation type
 # sample N pixels
 sampled_pixels <- pixel_locations %>%
-  filter(kg_class %in% classes) %>%
+  dplyr::filter(kg_class %in% classes) %>%
   group_by(igbp) %>%
-  slice_sample(n = 20000)
+  slice_sample(n = 2500) #20000
 
 # save to disk
 saveRDS(sampled_pixels, "data/sampled_pixels.rds")
