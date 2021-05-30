@@ -55,7 +55,7 @@ ggplot_cA_tot <- function(x){
     geom_ribbon(data = df, aes(x = cA_tot, ymin = lower, ymax = upper), alpha = 0.2) +
     geom_line(data = df, aes(cA_tot, off), col = "royalblue") +
     theme_classic() +
-    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-2, ")")), y = "EOS (DOY)")
+    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
   
   return(gg)
 }
@@ -70,7 +70,7 @@ ggplot_gpp_net <- function(x){
     geom_ribbon(data = df, aes(x = gpp_net, ymin = lower, ymax = upper), alpha = 0.2) +
     geom_line(data = df, aes(gpp_net, off), col = "royalblue") +
     theme_classic() +
-    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-2, ")")), y = "EOS (DOY)")
+    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
   
   return(gg)
 }
@@ -361,29 +361,35 @@ ggplot_year_anet <- function(x, y){
   
   coef <- 0.7 * mean(df1$off) / mean(df2$anet)
   
+  # library(grid)
+  # t1 <- textGrob(expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), x = 0, y = 1.1, gp = gpar(col = "black"))
+  
   gg <- ggplot() + 
     geom_ribbon(data = df1, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
     geom_line(data = df1, aes(x = year, y = off), col = "royalblue") +
     
     geom_ribbon(data = df2, aes(x = year, ymin = lower * coef + 100, ymax = upper * coef + 100), alpha = 0.2) +
-    geom_line(data = df2, aes(x = year, y = anet * coef + 100), col = "tomato") +
-    theme_classic() +
-    labs(x = "Year") +
+    geom_line(data = df2, aes(x = year, y = anet * coef + 100), col = "red") +
     scale_y_continuous(name = "EOS (DOY)",
-                       sec.axis = sec_axis( ~(. - 100) / coef, name = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-2, ")")))) +
-    theme(axis.text.y.right = element_text(colour="tomato"),
-          axis.ticks.y.right = element_line(colour="tomato"),
-          axis.title.y.right = element_text(colour="tomato"),
+                       sec.axis = sec_axis( ~(. - 100) / coef, name = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")))) +
+    labs(x = "Year", 
+         title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"), "      ", italic("A")[net], " ~ Year")), 
+         subtitle = "Zani et al.") +
+    theme_classic() +
+    # annotation_custom(grobTree(t1)) +
+    theme(axis.text.y.right = element_text(colour="red"),
+          axis.ticks.y.right = element_line(colour="red"),
+          axis.title.y.right = element_text(colour="red"),
           axis.text.y = element_text(colour="royalblue"),
           axis.ticks.y = element_line(colour="royalblue"),
           axis.title.y = element_text(colour="royalblue"),
           axis.line.y = element_line(colour = "royalblue"),
           axis.line.y.right = element_line(colour = "red"))
-    
+  
   return(gg)
 }
 
-gg_dual <- ggplot_year_anet(out_plot_lt, out_plot_anet)
+gg_dual <- ggplot_year_anet(x = out_plot_lt, y = out_plot_anet)
 ```
 
 ### Anet P-model
@@ -481,8 +487,6 @@ n_sign <- df_sampled_mean_anet %>%
 ## Figure 1
 
 ```{r}
-library(ggtext)
-
 gg_iav_zz <- gg_iav_zz +
   labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "Zani et al.")
 
@@ -494,15 +498,6 @@ gg_lt_zz_anet <- gg_lt_zz_anet +
 
 gg_lt_zz_year <- gg_lt_zz_year +
   labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), subtitle = "Zani et al.")
-
-gg_dual <- gg_dual +
-  labs(title = "**Fisher's *Iris* dataset**  
-               <span style='font-size:11pt'>Sepal width vs. sepal length for 
-               <span style='color:#0072B2;'>setosa</span>, 
-               <span style='color:#D55E00;'>versicolor</span>, and
-               <span style='color:#009E73;'>virginica</span>
-               </span>", #  expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), 
-       subtitle = "Zani et al.")
 
 pp <- (gg_iav_zz + gg_iav_us) /
   (gg_lt_zz_anet + gg_dual)
