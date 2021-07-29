@@ -21,9 +21,9 @@ library(patchwork)
 ## functions to convert lmer effects plots to ggplot objects
 ggplot_on <- function(x){
   df <- tibble(upper = x$`scale(on)`$upper[,1],
-                   lower = x$`scale(on)`$lower[,1],
-                   off = x$`scale(on)`$fit[,1],
-                   on = x$`scale(on)`$x[,1])
+               lower = x$`scale(on)`$lower[,1],
+               off = x$`scale(on)`$fit[,1],
+               on = x$`scale(on)`$x[,1])
   gg <- ggplot() + 
     geom_ribbon(data = df, aes(x = on, ymin = lower, ymax = upper), alpha = 0.2) +
     geom_line(data = df, aes(on, off), col = "royalblue") +
@@ -34,9 +34,9 @@ ggplot_on <- function(x){
 
 ggplot_year <- function(x){
   df <- tibble(upper = x$`scale(year)`$upper[,1],
-                   lower = x$`scale(year)`$lower[,1],
-                   off = x$`scale(year)`$fit[,1],
-                   year = x$`scale(year)`$x[,1])
+               lower = x$`scale(year)`$lower[,1],
+               off = x$`scale(year)`$fit[,1],
+               year = x$`scale(year)`$x[,1])
   gg <- ggplot() + 
     geom_ribbon(data = df, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
     geom_line(data = df, aes(year, off), col = "royalblue") +
@@ -48,14 +48,14 @@ ggplot_year <- function(x){
 ggplot_cA_tot <- function(x){
   
   df <- tibble(upper = x$`scale(cA_tot)`$upper[,1],
-                   lower = x$`scale(cA_tot)`$lower[,1],
-                   off = x$`scale(cA_tot)`$fit[,1],
-                   cA_tot = x$`scale(cA_tot)`$x[,1])
+               lower = x$`scale(cA_tot)`$lower[,1],
+               off = x$`scale(cA_tot)`$fit[,1],
+               cA_tot = x$`scale(cA_tot)`$x[,1])
   gg <- ggplot() + 
     geom_ribbon(data = df, aes(x = cA_tot, ymin = lower, ymax = upper), alpha = 0.2) +
     geom_line(data = df, aes(cA_tot, off), col = "royalblue") +
     theme_classic() +
-    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, "yr"^-2, ")")), y = "EOS (DOY)")
+    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
   
   return(gg)
 }
@@ -63,15 +63,34 @@ ggplot_cA_tot <- function(x){
 ggplot_gpp_net <- function(x){
   
   df <- tibble(upper = x$`scale(gpp_net)`$upper[,1],
-                   lower = x$`scale(gpp_net)`$lower[,1],
-                   off = x$`scale(gpp_net)`$fit[,1],
-                   gpp_net = x$`scale(gpp_net)`$x[,1])
+               lower = x$`scale(gpp_net)`$lower[,1],
+               off   = x$`scale(gpp_net)`$fit[,1],
+               gpp_net = x$`scale(gpp_net)`$x[,1])
   gg <- ggplot() + 
     geom_ribbon(data = df, aes(x = gpp_net, ymin = lower, ymax = upper), alpha = 0.2) +
     geom_line(data = df, aes(gpp_net, off), col = "royalblue") +
     theme_classic() +
-    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, "yr"^-2, ")")), y = "EOS (DOY)")
+    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
   
+  return(gg)
+}
+
+ggplot_year_anet <- function(x, y){
+  df <- tibble(upper = x$`scale(year)`$upper[,1],
+               lower = x$`scale(year)`$lower[,1],
+               off = x$`scale(year)`$fit[,1],
+               year = x$`scale(year)`$x[,1]) %>% 
+    bind_rows(
+      tibble(upper = y$`scale(year)`$upper[,1],
+             lower = y$`scale(year)`$lower[,1],
+             anet   = y$`scale(year)`$fit[,1],
+             year = y$`scale(year)`$x[,1])
+    )
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(year, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = "Year", y = "EOS (DOY)")
   return(gg)
 }
 ```
@@ -120,7 +139,7 @@ df_orig <- df_orig %>%
 df_orig_wide <- df_orig %>% 
    pivot_wider(names_from = "pheno", values_from = "day")
 
-df_anl <- df_zani %>% 
+df_anl <- df_anl %>% 
   rename(on_zani = on, off_zani = off) %>% 
   left_join(df_orig_wide, by = c("id_site", "species", "year"))
 
@@ -154,7 +173,7 @@ df_ndata <- df_anl %>%
   group_by(id_species_site) %>% 
   summarise(count = n())
 
-quantile(df_ndata$count, probs = 0.9)
+quantile(df_ndata$count, probs = c(0.5, 0.9))
 
 df_ndata %>% 
   ggplot(aes(count, ..count..)) +
@@ -208,6 +227,74 @@ gg_iav_zz <- ggplot_cA_tot(out_plot)
 gg_iav_zz
 ```
 
+#### Running mean Anet LPJ
+
+```{r}
+df_anl <- df_anl %>% 
+  mutate(cA_tot_rm2 = data.table::frollmean(cA_tot, 2),
+         cA_tot_rm3 = data.table::frollmean(cA_tot, 3),
+         cA_tot_rm5 = data.table::frollmean(cA_tot, 5),
+         cA_tot_rm10 = data.table::frollmean(cA_tot, 10))
+
+## test
+# df_anl %>% 
+#   dplyr::filter(id_species_site == "1_Fagus sylvatica") %>% 
+#   ggplot() +
+#   geom_line(aes(year, cA_tot)) +
+#   geom_line(aes(year, cA_tot_rm3), color = "red") +
+#   geom_line(aes(year, cA_tot_rm5), color = "blue") +
+#   geom_line(aes(year, cA_tot_rm10), color = "green")
+
+fit2 = lmer(off ~ scale(cA_tot_rm2) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+fit3 = lmer(off ~ scale(cA_tot_rm3) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+fit5 = lmer(off ~ scale(cA_tot_rm5) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+fit10 = lmer(off ~ scale(cA_tot_rm10) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+
+out_plot2 <- allEffects(fit2)
+out_plot3 <- allEffects(fit3)
+out_plot5 <- allEffects(fit5)
+out_plot10 <- allEffects(fit10)
+
+ggplot_cA_tot_rm <- function(out_plot2, out_plot3, out_plot5, out_plot10){
+    
+  df <- tibble(upper = out_plot2$`scale(cA_tot_rm2)`$upper[,1],
+               lower = out_plot2$`scale(cA_tot_rm2)`$lower[,1],
+               off = out_plot2$`scale(cA_tot_rm2)`$fit[,1],
+               cA_tot = out_plot2$`scale(cA_tot_rm2)`$x[,1]) %>% 
+    mutate(nyears = 2) %>% 
+    bind_rows(
+      tibble(upper = out_plot3$`scale(cA_tot_rm3)`$upper[,1],
+               lower = out_plot3$`scale(cA_tot_rm3)`$lower[,1],
+               off = out_plot3$`scale(cA_tot_rm3)`$fit[,1],
+               cA_tot = out_plot3$`scale(cA_tot_rm3)`$x[,1]) %>% 
+    mutate(nyears = 3)
+    ) %>% 
+    bind_rows(
+      tibble(upper = out_plot5$`scale(cA_tot_rm5)`$upper[,1],
+               lower = out_plot5$`scale(cA_tot_rm5)`$lower[,1],
+               off = out_plot5$`scale(cA_tot_rm5)`$fit[,1],
+               cA_tot = out_plot5$`scale(cA_tot_rm5)`$x[,1]) %>% 
+    mutate(nyears = 5)
+    ) %>% 
+    bind_rows(
+      tibble(upper = out_plot10$`scale(cA_tot_rm10)`$upper[,1],
+               lower = out_plot10$`scale(cA_tot_rm10)`$lower[,1],
+               off = out_plot10$`scale(cA_tot_rm10)`$fit[,1],
+               cA_tot = out_plot10$`scale(cA_tot_rm10)`$x[,1]) %>% 
+    mutate(nyears = 10)
+    )
+  
+  gg <- ggplot() + 
+    # geom_ribbon(data = df, aes(x = cA_tot, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(x = cA_tot, y = off, color = nyears, group = nyears)) +
+    theme_classic() +
+    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, "yr"^-2, ")")), y = "EOS (DOY)")
+}
+
+gg_2yr_zz <- ggplot_cA_tot_rm(out_plot2, out_plot3, out_plot5, out_plot10)
+gg_2yr_zz
+```
+
 ### Anet P-model
 
 ```{r}
@@ -254,25 +341,77 @@ gg_lt_sos_year_t
 Fit_LT_cA_tot = lmer(off ~ scale(cA_tot) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
 
 aic_lt_zz <- AIC(Fit_LT_cA_tot)
-out_plot <- allEffects(Fit_LT_cA_tot)
-gg_lt_zz_anet <- ggplot_cA_tot(out_plot)
-gg_lt_zz_year <- ggplot_year(out_plot)
+out_plot_lt <- allEffects(Fit_LT_cA_tot)
+gg_lt_zz_anet <- ggplot_cA_tot(out_plot_lt)
+gg_lt_zz_year <- ggplot_year(out_plot_lt)
 
 gg_lt_zz_anet + gg_lt_zz_year
 ```
+Is this the better model than EOS ~ Anet?
+```{r}
+out_anova <- anova(Fit_IAV_cA_tot, Fit_LT_cA_tot)
+out_anova
+```
+
 
 Long-term trend in Anet
 ```{r}
 mod_anet_year <- lmer(cA_tot ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
 
-out_plot <- allEffects(mod_anet_year)
-gg_lt_anet_year <- ggplot_year(out_plot)
+out_plot_anet <- allEffects(mod_anet_year)
+gg_lt_anet_year <- ggplot_year(out_plot_anet)
 
 gg_lt_anet_year <- gg_lt_anet_year + 
   labs(y = expression(italic("A")[net])) + 
   theme(plot.background = element_rect(fill = "grey80"))
+gg_lt_anet_year
 ```
 
+
+```{r}
+ggplot_year_anet <- function(x, y){
+  
+  df1 <- tibble(upper = x$`scale(year)`$upper[,1],
+               lower = x$`scale(year)`$lower[,1],
+               off = x$`scale(year)`$fit[,1],
+               year = x$`scale(year)`$x[,1])
+  df2 <- tibble(upper = y$`scale(year)`$upper[,1],
+             lower = y$`scale(year)`$lower[,1],
+             anet = y$`scale(year)`$fit[,1],
+             year = y$`scale(year)`$x[,1])
+  
+  coef <- 0.7 * mean(df1$off) / mean(df2$anet)
+  
+  # library(grid)
+  # t1 <- textGrob(expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), x = 0, y = 1.1, gp = gpar(col = "black"))
+  
+  gg <- ggplot() + 
+    geom_ribbon(data = df1, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df1, aes(x = year, y = off), col = "royalblue") +
+    
+    geom_ribbon(data = df2, aes(x = year, ymin = lower * coef + 100, ymax = upper * coef + 100), alpha = 0.2) +
+    geom_line(data = df2, aes(x = year, y = anet * coef + 100), col = "red") +
+    scale_y_continuous(name = "EOS (DOY)",
+                       sec.axis = sec_axis( ~(. - 100) / coef, name = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")))) +
+    labs(x = "Year", 
+         title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"), "      ", italic("A")[net], " ~ Year")), 
+         subtitle = "Zani et al.") +
+    theme_classic() +
+    # annotation_custom(grobTree(t1)) +
+    theme(axis.text.y.right = element_text(colour="red"),
+          axis.ticks.y.right = element_line(colour="red"),
+          axis.title.y.right = element_text(colour="red"),
+          axis.text.y = element_text(colour="royalblue"),
+          axis.ticks.y = element_line(colour="royalblue"),
+          axis.title.y = element_text(colour="royalblue"),
+          axis.line.y = element_line(colour = "royalblue"),
+          axis.line.y.right = element_line(colour = "red"))
+  
+  return(gg)
+}
+
+gg_dual <- ggplot_year_anet(x = out_plot_lt, y = out_plot_anet)
+```
 
 ### Anet P-model
 
@@ -301,15 +440,89 @@ gg_lt_anet_year <- gg_lt_anet_year +
   theme(plot.background = element_rect(fill = "grey80"))
 ```
 
+## IAV vs. long-term vs. mean
+
+This is based on a spatially stratified sampling.
+
+### Anet LPJ
+
+Separate mean across years 1970-2000 from interannual anomaly.
+```{r eval=FALSE}
+separate_anom <- function(df){
+  df_mean <- df %>% 
+    dplyr::filter(year %in% 1970:2000) %>% 
+    summarise(mean_off = mean(off, na.rm = TRUE), 
+              mean_cA_tot = mean(cA_tot, na.rm = TRUE))
+  df %>% 
+    mutate(mean_cA_tot = df_mean$mean_cA_tot,
+           anom_cA_tot = cA_tot - df_mean$mean_cA_tot)
+}
+df_anl <- df_anl %>% 
+  group_by(id_species_site) %>% 
+  nest() %>% 
+  mutate(data = map(data, ~separate_anom(.))) %>% 
+  unnest(data)
+```
+
+Bootstrap 300 samples and test for significance in the mean Anet coefficient. This returns a data frame containing the coefficient estimate and the p-value for each sample.
+```{r eval=FALSE}
+get_pval_mean_anet <- function(use_seed, df){
+  
+  ## sample one time series per gridcell
+  set.seed(use_seed)
+  df_sites_sampled <- df %>% 
+    dplyr::select(id_species_site, lon_mid, lat_mid) %>% 
+    distinct() %>% 
+    group_by(lon_mid, lat_mid) %>% 
+    sample_n(1)
+  df <- df %>% 
+    dplyr::filter(id_species_site %in% df_sites_sampled$id_species_site)
+  
+  ## fit model separating mean Anet
+  Fit_LT_anom = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) + (1|id_site) + (1|species), data = df, na.action = "na.exclude")
+  
+  ## return p value for significance of term representing mean Anet
+  out_sum <- summary(Fit_LT_anom)
+  pval <- out_sum$coefficients["scale(mean_cA_tot)", "Pr(>|t|)"]
+  esti <- out_sum$coefficients["scale(mean_cA_tot)", "Estimate"]
+  
+  return(tibble(estimate = esti, pval = pval))
+}
+
+n_samples <- 300
+df_sampled_mean_anet <- purrr::map_dfr(as.list(seq(n_samples)), ~get_pval_mean_anet(., df_anl))
+
+df_sampled_mean_anet %>% 
+  ggplot(aes(estimate, ..count..)) +
+  geom_histogram()
+
+n_sign <- df_sampled_mean_anet %>% 
+  dplyr::filter(pval < 0.05) %>% 
+  nrow()
+
+## fraction not significant
+1 - n_sign/n_samples
+```
+
+
 ## Figure 1
 
 ```{r}
-pp <- (gg_iav_zz + gg_lt_anet_year) /
-  (gg_lt_zz_anet + gg_lt_zz_year)
-pp + plot_annotation(
-  title = expression(paste("EOS ~ ", italic("A")[net], " Zani et al.")),
-  tag_levels = 'A'
-)
+gg_iav_zz <- gg_iav_zz +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "Zani et al.")
+
+gg_iav_us <- gg_iav_us +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "P-model")
+
+gg_lt_zz_anet <- gg_lt_zz_anet +
+  labs(title = expression(paste("EOS ~ ", bolditalic("A")[bold(net)], " + Year")), subtitle = "Zani et al.")
+
+gg_lt_zz_year <- gg_lt_zz_year +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), subtitle = "Zani et al.")
+
+pp <- (gg_iav_zz + gg_iav_us) /
+  (gg_lt_zz_anet + gg_dual)
+pp + plot_annotation(tag_levels = 'A')
 ggsave("fig/fig_1_wrapup_zz.pdf", width = 8, height = 6)
 ggsave("fig/fig_1_wrapup_zz.png", width = 8, height = 6)
 
@@ -333,3 +546,4 @@ ggsave("fig/fig_1_wrapup_sos.png", width = 8, height = 6)
 ```
 
 
+Fig. 1 (A) Relationship of end-of-season (EOS, expressed as day-of-year, DOY) versus Anet simulated by Zani et al., based on a linear mixed-effects regression (LMER) model with scaled Anet as a fixed effect and site and species as grouping variables of random intercepts. (B) Temporal trend of Anet, based on a LMER model with year as a fixed effect and site and species as grouping variables of the random intercept. (C, D) Partial relationships of a multiple LMER model, where the long-term trend (year) and Anet are treated as fixed effects (effects shown here), and site and species are treated as grouping variables of the random intercepts. The trend towards later EOS (D) exists in parallel with the trend towards higher Anet (B).
