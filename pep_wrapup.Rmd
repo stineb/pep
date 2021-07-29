@@ -163,6 +163,27 @@ df_ndata %>%
   labs(title = "PEP725 phenology time series lengthts")
 ```
 
+```{r}
+yrrange <- df_anl %>% 
+  pull(year) %>% 
+  range()
+yrrange[2] - yrrange[1]
+
+df_anl %>% 
+  ggplot(aes(year, ..count..)) +
+  geom_histogram() +
+  xlab("Year") +
+  labs(title = "PEP725 phenology time series lengthts")
+```
+
+Range of  latitudes.
+```{r}
+latrange <- df_anl %>% 
+  pull(lat) %>% 
+  range()
+latrange[2] - latrange[1]
+```
+
 ## IAV
 
 ### SOS
