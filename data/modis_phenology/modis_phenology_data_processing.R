@@ -28,7 +28,7 @@ subset <- mt_subset(
 subset <- subset %>%
   filter(value <= 32766) %>% # drop fill values (not relevant for Northern Hemisphere)
   mutate(
-    doy = doy[value], # subsitute locations for doy values
+    doy = doy[value], # substitute locations for doy values
     date = date[value] # if you want an absolute date
   )
 
