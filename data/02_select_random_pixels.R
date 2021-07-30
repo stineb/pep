@@ -3,19 +3,23 @@
 
 # load libraries
 library(dplyr)
+library(rbeni)
 
 # read in pixel location data
 pixel_locations <- readRDS("data/pixel_locations.rds")
 
 # which Koeppen-Geiger classes to select, see table below
-classes <- c(11:16, 20:28)
+classes <- c(11:16, 21:28)
 
 # Filter on KG classes, and group by IGBP vegetation type
 # sample N pixels
 sampled_pixels <- pixel_locations %>%
-  filter(kg_class %in% classes) %>%
-  group_by(igbp) %>%
-  slice_sample(n = 20000)
+  filter(kg_class %in% classes & lat > 0) %>%
+  # group_by(igbp) %>%
+  slice_sample(n = 5000)
+
+plot_map_simpl() +
+  geom_point(data = sampled_pixels, aes(lon, lat), col = "red", size = 0.2)
 
 # save to disk
 saveRDS(sampled_pixels, "data/sampled_pixels.rds")
