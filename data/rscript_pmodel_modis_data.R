@@ -14,7 +14,7 @@ library(raster)
 library(sf)
 
 source("R/format_drivers.R")
-source("R/run_pmodel_modis.R")
+source("R/process_pmodel_modis.R")
 
 # read sites data frame, in this case
 # the list of all MODIS
