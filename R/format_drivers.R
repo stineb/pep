@@ -168,7 +168,9 @@ format_drivers <- function(
   }
   
   if(bias_correction){
-    ddf_watch <- ingest(
+    ddf_watch <- 
+      suppressWarnings(
+      ingest(
       siteinfo = siteinfo,
       source    = "watch_wfdei",
       getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
@@ -176,20 +178,22 @@ format_drivers <- function(
       settings  = list(
         correct_bias = "worldclim",
         dir_bias = "~/data/worldclim")
-    )  
+    ))
   } else {
     
     if(verbose){
       message("Processing WATCH data course levels ....")
     }
     
-    ddf_watch <- ingest(
+    ddf_watch <- 
+      suppressWarnings(
+      ingest(
       siteinfo = siteinfo,
       source    = "watch_wfdei",
       getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
       dir       = "~/data/watch_wfdei/",
       settings = list(correct_bias = NULL)
-    )
+    ))
   }
   
   # memory intensive, purge memory
