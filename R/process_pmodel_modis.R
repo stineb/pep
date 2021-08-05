@@ -48,6 +48,8 @@ process_pmodel_modis <- function(
     )
   )
   
+  print(head(mod))
+  
   # check on success of the run
   if(inherits(df, "try-error")){
     return(NULL)
