@@ -23,7 +23,7 @@ df <- readRDS("data/sampled_pixels.rds") %>%
     year_start = 2001,
     year_end = 2014,
     sitename = paste("pixel", lat, lon, sep = "_")
-  )
+  ) %>% ungroup()
 
 # read etopo data
 if(!grepl('eu-', Sys.info()['nodename'])){
