@@ -170,15 +170,18 @@ format_drivers <- function(
   if(bias_correction){
     ddf_watch <- 
       suppressWarnings(
-      ingest(
-      siteinfo = siteinfo,
-      source    = "watch_wfdei",
-      getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
-      dir       = "~/data/watch_wfdei/",
-      settings  = list(
-        correct_bias = "worldclim",
-        dir_bias = "~/data/worldclim")
-    ))
+        suppressMessages(
+          ingest(
+            siteinfo = siteinfo,
+            source    = "watch_wfdei",
+            getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
+            dir       = "~/data/watch_wfdei/",
+            settings  = list(
+              correct_bias = "worldclim",
+              dir_bias = "~/data/worldclim")
+          )
+        )
+      )
   } else {
     
     if(verbose){
@@ -187,13 +190,16 @@ format_drivers <- function(
     
     ddf_watch <- 
       suppressWarnings(
-      ingest(
-      siteinfo = siteinfo,
-      source    = "watch_wfdei",
-      getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
-      dir       = "~/data/watch_wfdei/",
-      settings = list(correct_bias = NULL)
-    ))
+        suppressMessages(
+          ingest(
+            siteinfo = siteinfo,
+            source    = "watch_wfdei",
+            getvars   = c("temp", "prec", "ppfd", "vpd", "patm"),
+            dir       = "~/data/watch_wfdei/",
+            settings = list(correct_bias = NULL)
+          )
+        )
+      )
   }
   
   # memory intensive, purge memory
