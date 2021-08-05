@@ -40,7 +40,7 @@ process_pmodel_modis <- function(
       suppressMessages(
         runread_pmodel_f(
           df,
-          params_modl = params_modl,
+          par = params_modl,
           makecheck = TRUE,
           parallel = FALSE
         )
