@@ -48,22 +48,31 @@ process_pmodel_modis <- function(
     )
   )
   
-  print(head(mod))
-  
   # check on success of the run
   if(inherits(df, "try-error")){
     return(NULL)
   }
   
-  # split out latitude
-  mod$lat <- df$siteinfo[[1]]$lat
+  # unnest (flatten) the output dataframe
+  mod <- mod %>%
+    unnest(cols = c(data))
+  
+  # grab the site info
+  siteinfo <- df %>%
+    dplyr::select(sitename, siteinfo) %>%
+    unnest(cols = c(siteinfo))
+  
+  # merge meta-data with site info
+  mod <- left_join(mod, siteinfo)
   
   # grab some of the forcing data
-  tmp <- df$forcing[[1]] %>%
-    dplyr::select(date, ppfd)
+  tmp <- df %>%
+    dplyr::select(sitename, forcing) %>%
+    unnest(cols = c(forcing)) %>%
+    dplyr::select(sitename, date, ppfd)
   
   # join input data and output model data
-  mod <- left_join(mod, tmp, by = "date")
+  mod <- left_join(mod, tmp, by = c("sitename", "date"))
   
   # convert data
   df_out <- mod %>%
@@ -89,7 +98,7 @@ process_pmodel_modis <- function(
   # aggregate if so desired
   if (agg){
     df_out <- df_out %>% 
-      group_by(year) %>% 
+      group_by(sitename, lat, lon, year) %>% 
       summarise(
         gpp = sum(gpp),
         rd = sum(rd),

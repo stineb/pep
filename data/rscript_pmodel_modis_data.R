@@ -78,9 +78,6 @@ if(args[3]){
   filename <- file.path(path, paste0("pmodel_output_",args[1],".rds"))
   saveRDS(df_pmodel, filename)
 } else {
-  for (i in 1:nrow(df_pmodel)){
-    # write cell / file to disk
-    filename <- file.path(path, paste0(df_pmodel$sitename[i],".rds"))
-    saveRDS(df_pmodel[i,], filename)
-  }
+  filename <- file.path(path, paste0("pmodel_drivers_",args[1],".rds"))
+  saveRDS(df_pmodel, filename)
 }
