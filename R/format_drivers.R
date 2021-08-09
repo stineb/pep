@@ -46,7 +46,9 @@ format_drivers <- function(
   params_modl = list(
     kphio           = 0.09423773,
     soilm_par_a     = 0.33349283,
-    soilm_par_b     = 1.45602286
+    soilm_par_b     = 1.45602286,
+    tau_acclim_tempstress = 10,
+    par_shape_tempstress  = 0.0
   ),
   df_soiltexture = bind_rows(
     top    = tibble(
@@ -64,7 +66,7 @@ format_drivers <- function(
   ),
   bias_correction = FALSE,
   verbose = TRUE,
-  run_model = "modis"
+  run_model = FALSE
   ){
   
   #---- startup checks ----
@@ -155,9 +157,11 @@ format_drivers <- function(
     }
     
     ## fill gaps in whc
-    whc_median <- median(siteinfo$whc, na.rm = TRUE)
+    whc_median <- median(siteinfo$whc,
+                         na.rm = TRUE)
     siteinfo <- siteinfo %>% 
-      mutate(whc = ifelse(is.na(whc), whc_median, whc))
+      mutate(whc = ifelse(is.na(whc),
+                          whc_median, whc))
   }
   
   #---- grabbing WATCH data ----
@@ -272,7 +276,7 @@ format_drivers <- function(
     message("Combining all driver data ....")
   }
   
-  output <- collect_drivers_sofun( 
+  output <- collect_drivers_sofun(
     siteinfo       = siteinfo,
     params_siml    = params_siml,
     meteo          = ddf_meteo, 
@@ -281,7 +285,7 @@ format_drivers <- function(
     df_soiltexture = df_soiltexture
   )
   
-  if (tolower(run_model) == "modis"){
+  if (run_model){
     message("Running model on formatted data ....")
     output <- process_pmodel_modis(
       file = output
