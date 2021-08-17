@@ -1,4 +1,27 @@
-run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_siml, params_modl, df_soiltexture, agg = TRUE){
+#' Run pmodel and combine results
+#' 
+#' Runs pmodel with PEP specific data formatting
+#' and returns aggregated results to limit output
+#' data volumes
+#'
+#' @param df_pheno phenology of a site
+#' @param df_forcing forcing data
+#' @param df_co2 co2 data
+#' @param df_siteinfo siteinfo
+#' @param params_siml simulation parameters
+#' @param params_modl model settings
+#' @param df_soiltexture soil texture data
+#' @param agg 
+
+run_pmodel_pep <- function(
+  df_pheno,
+  df_forcing,
+  df_co2,
+  df_siteinfo,
+  params_siml,
+  params_modl,
+  df_soiltexture,
+  agg = TRUE){
   
   # print(df_pheno[1,])
   
@@ -60,7 +83,8 @@ run_pmodel_pep <- function(df_pheno, df_forcing, df_co2, df_siteinfo, params_sim
     makecheck = TRUE 
   )
   
-  ## determine DOY when daylength falls below 11 h. THIS WORKS ONLY FOR THE NORTHERN HEMISPHERE!
+  # determine DOY when daylength falls below 11 h. 
+  # THIS WORKS ONLY FOR THE NORTHERN HEMISPHERE!
   vec_dayl <- geosphere::daylength(df_siteinfo$lat, 1:365)
   vec_dayl[1:lubridate::yday("21-06-2001")] <- 9999 # first half of the year
   doy_11h <- min(which(vec_dayl < 11))

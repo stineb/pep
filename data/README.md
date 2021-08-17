@@ -46,12 +46,26 @@ writeRaster(r, "data/land_cover/IGBP_DB_2010_2019_eroded.tif",
             options="COMPRESS=DEFLATE", 
             overwrite=TRUE)
 ```
+## p-model output
 
-## Land Cover
+Selected pixels can be processed for matching p-model output by running:
+
+```bash
+sh src/batch_process_modis.sh
+```
+
+in an Euler session (with your prompt in the top most project directory - i.e. pep).
+
+Output will be written to ~/data/modis_pmodel_output.
+
+## References
+
+### Land Cover
 
 IGBP land cover (at 500m) for all Deciduous Broadleaf pixels
 
-## Koeppen-Geiger classes
+### Koeppen-Geiger classes
 
 Downloaded from the World Bank, but provided by U. Wien.
+
 

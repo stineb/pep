@@ -3,12 +3,13 @@
 
 # load libraries
 library(dplyr)
+library(rbeni)
 
 # read in pixel location data
 pixel_locations <- readRDS("data/pixel_locations.rds")
 
 # which Koeppen-Geiger classes to select, see table below
-classes <- c(11:16, 20:28)
+classes <- c(11:16, 21:28)
 
 # Filter on KG classes, and group by IGBP vegetation type
 # sample N pixels

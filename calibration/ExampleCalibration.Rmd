@@ -19,6 +19,7 @@ library(ggpubr)
 ```
 
 ### Load subset of data for the example
+
 ```{r,include=FALSE,eval=TRUE}
 load("data/datalist_example.RData")
 preds.df <- read.csv("data/preds.df_example.csv",sep=";")
@@ -39,6 +40,7 @@ df_tseries_id <- read.csv("data/df_tseries_id_example.csv",sep=";")
 ## PIA:
 # PIA_gsi (chilling temperature, autumn daylength, leaf flushing date, growing season mean temperature, daylength, vapour pressure deficit)
 # PIA-/+ (chilling temperature, autumn daylength, leaf flushing date, growing season mean temperature, daylength, precipitation, net radiation, CO2 concentration, -/+ water stress)
+
 
 TPM.model = function(par, data){
   # exit the routine as some parameters are missing
@@ -146,12 +148,11 @@ SecondGen_PIA.models = function(par, predictor, data) {
   
   return(doy)
 }
-
 ```
 
 ## Site-species (timeseries) calibration using the phenor package Ex. 1 - 1_Fagus_sylvatica
 
-### Select a timeseries (site-species calibration)
+Select a timeseries (site-species calibration)
 ```{r ,include=FALSE,eval=TRUE}
 args = commandArgs(trailingOnly=TRUE)
 
@@ -170,7 +171,7 @@ sp <- df_tmp %>% pull(Species)
 site <- df_tmp %>% pull(PEP_ID)
 ```
 
-### Estimate model parameters and predictions
+Estimate model parameters and predictions
 ```{r, include=FALSE, eval=TRUE}
 ##------------------------------------------
 ## Predictions
@@ -318,7 +319,7 @@ ggarrange(PlotTPM,PlotTPDM,PlotPIAplus, ncol = 3, nrow = 1)
 
 ## Site-species (timeseries) calibration using the phenor package Ex. 2 - 1_Quercus_robur
 
-### Select a timeseries (site-species calibration)
+Select a timeseries (site-species calibration)
 ```{r, include=FALSE, eval=TRUE}
 args = commandArgs(trailingOnly=TRUE)
 
@@ -335,7 +336,7 @@ sp <- df_tmp %>% pull(Species)
 site <- df_tmp %>% pull(PEP_ID)
 ```
 
-### Estimate model parameters and predictions
+Estimate model parameters and predictions
 ```{r, include=FALSE, eval=TRUE}
 ##------------------------------------------
 ## Predictions
