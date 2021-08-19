@@ -44,9 +44,13 @@ doy <- as.numeric(format(seq(as.Date("1970-01-01"),Sys.Date(), "days"),"%j"))
 
 # Convert value output to DOY
 data_modisEVI_pheno <- data_modisEVI_pheno %>%
+  mutate(year=year(date)) %>%
   dplyr::filter(Greenup.Num_Modes_01 <= 32766) %>% 
   dplyr::filter(MidGreendown.Num_Modes_01 <= 32766) %>% # drop fill values (not relevant for Northern Hemisphere)
   mutate(SOS_date = dates[Greenup.Num_Modes_01], SOS_doy = doy[Greenup.Num_Modes_01], SOS_date2 = as_date(Greenup.Num_Modes_01), SOS_doy2 = yday(SOS_date2)) %>%
-  mutate(EOS_date = dates[MidGreendown.Num_Modes_01], EOS_doy = doy[MidGreendown.Num_Modes_01], EOS_date2 = as_date(MidGreendown.Num_Modes_01), EOS_doy2 = yday(EOS_date2))
+  mutate(EOS_date = dates[MidGreendown.Num_Modes_01], EOS_doy = doy[MidGreendown.Num_Modes_01], EOS_date2 = as_date(MidGreendown.Num_Modes_01), EOS_doy2 = yday(EOS_date2)) 
+
+modis_pheno_sites <- sampled_pixels[,1:3] %>% left_join(data_modisEVI_pheno) %>% relocate(year,.after=date) 
+saveRDS(modis_pheno_sites, "~/pep/data/modis_pheno_sites.rds")
 
 
