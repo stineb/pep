@@ -230,7 +230,7 @@ df_mine <- df_mine %>%
   ungroup()
 ```
 
-## Get data.
+## Get forcing data
 
 This is done now by `rscript_get_watch_cru.R` and `submit_get_watch_cru.sh`
 

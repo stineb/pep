@@ -33,130 +33,125 @@ df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") 
   mutate(cA_tot = `cA_tot-w`)
 ```
 
-Compare this to "my" dataset created in `pep.Rmd` (`df_anl`).
-```{r}
-df_mine <- read_csv("data/df_anl_zani.csv")
-
-df_tmp <- df %>%
-  left_join(df_mine, by = c("id_species_site", "year"))
-
-df_tmp %>% analyse_modobs2("on.x", "on.y")
-df_tmp %>% analyse_modobs2("off.x", "off.y")
-```
-
-Unfortunately, the SOS and EOS dates are not entirely identical for the two datasets. This could be due to applying the `distinct()` function somewhere along the process. There should really only be one single SOS and EOS data, resp., for each year, species, and site. Look into this again and find out what is done (and should be done) with duplicates.
-
-```{r}
-df_problem <- df_tmp %>%
-  dplyr::filter(off.x != off.y) %>%
-  dplyr::select(id_species_site, year, off_theirs = off.x, off_mine = off.y)
-df_problem
-```
-
-Load the cleaned data frame before transforming into wider format.
-```{r}
-df_long <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>%  #  "data/df_sub.csv"
-  as_tibble() %>%
-  mutate(pheno = ifelse(phenology == "leaf.out", "on", ifelse(phenology == "leaf.off", "off", NA))) %>%
-  mutate(id_species_site = timeseries) %>%
-  rename(day_correct = DoY, id_site = s_id) %>%
-  dplyr::select(id_species_site, year, pheno, day_correct)
-
-df_problem <- df_problem %>%
-  left_join(df_long %>% dplyr::filter(pheno == "off"), by = c("id_species_site", "year")) %>%
-  rowwise() %>%
-  mutate(correct_mine = ifelse(off_mine == day_correct, TRUE, FALSE))
-
-## check if any of my dates are not correct
-any(!df_problem$correct_mine)
-```
-
-Mine is correct!
-
-Select which one to use for further analysis.
-
-<!-- Taking uncorrected Zani -->
+<!-- Compare this to "my" dataset created in `pep.Rmd` (`df_anl`). -->
 <!-- ```{r} -->
-<!-- df_anl <- df -->
+<!-- df_mine <- read_csv("data/df_anl_zani.csv") -->
+
+<!-- df_tmp <- df %>% -->
+<!--   left_join(df_mine, by = c("id_species_site", "year")) -->
+
+<!-- df_tmp %>% analyse_modobs2("on.x", "on.y") -->
+<!-- df_tmp %>% analyse_modobs2("off.x", "off.y") -->
 <!-- ``` -->
 
-Correct Zani data.
+<!-- Unfortunately, the SOS and EOS dates are not entirely identical for the two datasets. This could be due to applying the `distinct()` function somewhere along the process. There should really only be one single SOS and EOS data, resp., for each year, species, and site. Look into this again and find out what is done (and should be done) with duplicates. -->
+
+<!-- ```{r} -->
+<!-- df_problem <- df_tmp %>% -->
+<!--   dplyr::filter(off.x != off.y) %>% -->
+<!--   dplyr::select(id_species_site, year, off_theirs = off.x, off_mine = off.y) -->
+<!-- df_problem -->
+<!-- ``` -->
+
+<!-- Load the cleaned data frame before transforming into wider format. -->
+<!-- ```{r} -->
+<!-- df_long <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>%  #  "data/df_sub.csv" -->
+<!--   as_tibble() %>% -->
+<!--   mutate(pheno = ifelse(phenology == "leaf.out", "on", ifelse(phenology == "leaf.off", "off", NA))) %>% -->
+<!--   mutate(id_species_site = timeseries) %>% -->
+<!--   rename(day_correct = DoY, id_site = s_id) %>% -->
+<!--   dplyr::select(id_species_site, year, pheno, day_correct) -->
+
+<!-- df_problem <- df_problem %>% -->
+<!--   left_join(df_long %>% dplyr::filter(pheno == "off"), by = c("id_species_site", "year")) %>% -->
+<!--   rowwise() %>% -->
+<!--   mutate(correct_mine = ifelse(off_mine == day_correct, TRUE, FALSE)) -->
+
+<!-- ## check if any of my dates are not correct -->
+<!-- any(!df_problem$correct_mine) -->
+<!-- ``` -->
+
+<!-- Mine is correct! -->
+
+<!-- Select which one to use for further analysis. -->
+
+Taking uncorrected Zani
 ```{r}
-df_correct <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>%  #  "data/df_sub.csv"
-  as_tibble() %>%
-  mutate(pheno = ifelse(phenology == "leaf.out", "on", ifelse(phenology == "leaf.off", "off", NA))) %>%
-  mutate(id_species_site = timeseries) %>%
-  rename(day = DoY, id_site = s_id) %>%
-  dplyr::select(id_species_site, year, pheno, day) %>% 
-  pivot_wider(names_from = pheno, values_from = day)
-
-df <- df %>%
-  dplyr::rename(on_zani = on, off_zani = off) %>% 
-  left_join(df_correct, by = c("id_species_site", "year"))
-
-## some are actually missing - weird
-sum(is.na(df$on))
-sum(is.na(df$off))
-
-df %>% 
-  dplyr::filter(is.na(off))
-
-## take zani data for these
-df_anl <- df %>%
-  rowwise() %>%
-  mutate(on = ifelse(is.na(on), on_zani, on),
-         off = ifelse(is.na(off), off_zani, off))
-
-# ## or just drop them
-# df_anl <- df %>% 
-#   drop_na(on, off)
+df_anl <- df
 ```
+
+<!-- Correct Zani data. -->
+<!-- ```{r} -->
+<!-- df_correct <- data.table::fread("~/data/pep/processed/DataMeta_2_PhenologyObs_PEP725_CleanData.csv") %>%  #  "data/df_sub.csv" -->
+<!--   as_tibble() %>% -->
+<!--   mutate(pheno = ifelse(phenology == "leaf.out", "on", ifelse(phenology == "leaf.off", "off", NA))) %>% -->
+<!--   mutate(id_species_site = timeseries) %>% -->
+<!--   rename(day = DoY, id_site = s_id) %>% -->
+<!--   dplyr::select(id_species_site, year, pheno, day) %>%  -->
+<!--   pivot_wider(names_from = pheno, values_from = day) -->
+
+<!-- df <- df %>% -->
+<!--   dplyr::rename(on_zani = on, off_zani = off) %>%  -->
+<!--   left_join(df_correct, by = c("id_species_site", "year")) -->
+
+<!-- ## some are actually missing - weird -->
+<!-- sum(is.na(df$on)) -->
+<!-- sum(is.na(df$off)) -->
+
+<!-- df %>%  -->
+<!--   dplyr::filter(is.na(off)) -->
+
+<!-- ## take zani data for these -->
+<!-- df_anl <- df %>% -->
+<!--   rowwise() %>% -->
+<!--   mutate(on = ifelse(is.na(on), on_zani, on), -->
+<!--          off = ifelse(is.na(off), off_zani, off)) -->
+
+<!-- # ## or just drop them -->
+<!-- # df_anl <- df %>%  -->
+<!-- #   drop_na(on, off) -->
+<!-- ``` -->
 
 Add GPP from P-model siulations. XXX these are based on faulty EOS dates from Zani!!!
 ```{r}
-load("data/df_pmodel.RData")
+load("data/df_pmodel_zani.RData")
 
-df_anl <- df_anl %>% 
-  left_join(df_pmodel %>% 
-              dplyr::select(id_species_site, out_pmodel) %>% 
-              unnest(out_pmodel),
-            by = c("id_species_site", "year"))
-
-## add LUE
-df_anl <- df_anl %>% 
-  mutate(lue = gpp / apar)
+df_anl <- df_pmodel_zani %>% 
+  unnest(out_pmodel) %>% 
+  right_join(df_anl, by = c("id_species_site", "year")) %>% 
+  mutate(gpp_net = gpp - rd,
+         lue = gpp / apar)
 ```
 
 Check consistency of P-model and LPJ-GUESS GPP.
 ```{r}
 out <- df_anl %>% 
-  analyse_modobs2("cA_tot", "gpp", type = "heat")
+  analyse_modobs2("cA_tot", "gpp_net", type = "heat")
 out$gg
 ```
 
 Generally consistent except for a bunch of points where LPJ-GUESS GPP is very low. What's up with that?
 ```{r}
-linmod <- lm(gpp ~ cA_tot, data = df_anl)
+linmod <- lm(gpp_net ~ cA_tot, data = df_anl)
 
 df_tmp <- df_anl %>% 
-  mutate(diff = cA_tot - gpp) %>% 
-  mutate(pdiff = diff / gpp)
-
-df_sub <- df_tmp %>% 
-  dplyr::filter(cA_tot < 800 & gpp > 100)
+  mutate(diff = cA_tot - gpp_net) %>% 
+  dplyr::filter(cA_tot < 800 & gpp_net > 1000)
 
 plot_map_simpl() +
   geom_point(
-    data = df_sub, 
+    data = df_tmp, 
     aes(x = lon, y = lat, color = pdiff), 
     color = "red") +
   xlim(-10,30) + ylim(30, 60)
 
 table(df_anl$species)/nrow(df_anl)
-table(df_sub$species)/nrow(df_sub)
-```
+table(df_tmp$species)/nrow(df_tmp)
 
-A lot of Larix decidua!
+df_tmp %>% 
+  ggplot(aes(x = cA_tot, y = gpp_net, color = species)) + 
+  geom_point()
+```
 
 
 ## Interannual
