@@ -182,5 +182,5 @@ if (ncores > 1){
   
 }
 
-save(df_pmodel_mine, file = "data/df_pmodel_mine.RData")
+save(df_pmodel_mine, file = "data/df_pmodel_mine_smalljob.RData")
 
