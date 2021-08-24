@@ -2,7 +2,7 @@
 args <- commandArgs(trailingOnly=TRUE)
 
 # set output path
-path <- "~/data/modis_pmodel_output"
+path <- "~/data/pep_pmodel_output"
 
 # load libraries and
 # scripts
@@ -24,22 +24,15 @@ df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") 
   rename(
     lon = LON,
     lat = LAT,
-    year = YEAR,
-    off = DoY_off,
-    on = DoY_out, 
-    anom_off_zani = autumn_anomaly,
-    anom_on_zani = spring_anomaly, 
-    species = Species,
-    s_id = PEP_ID,
-    id_species_site = timeseries) %>% 
-  
-  ## use the on-water-stressed version of A
-  mutate(cA_tot = `cA_tot-w`) %>%
+    sitename = timeseries) %>%
+  select(
+    lon, lat, sitename 
+  ) %>%
+  unique() %>%
   mutate(
-    year_start = 2001,
-    year_end = 2014,
-    sitename = paste("pixel", lat, lon, sep = "_")
-  ) %>% ungroup()
+    year_start = 1979,
+    year_end = 2014
+  )
 
 # read etopo data
 if(!grepl('eu-', Sys.info()['nodename'])){
