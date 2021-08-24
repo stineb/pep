@@ -12,13 +12,29 @@ library(rsofun)
 library(rbeni)
 library(raster)
 library(sf)
+library(data.table)
 
 source("R/format_drivers.R")
 source("R/process_pmodel_modis.R")
 
 # read sites data frame, in this case
 # the list of all MODIS
-df <- readRDS("data/sampled_pixels.rds") %>%
+df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
+  as_tibble() %>% 
+  rename(
+    lon = LON,
+    lat = LAT,
+    year = YEAR,
+    off = DoY_off,
+    on = DoY_out, 
+    anom_off_zani = autumn_anomaly,
+    anom_on_zani = spring_anomaly, 
+    species = Species,
+    s_id = PEP_ID,
+    id_species_site = timeseries) %>% 
+  
+  ## use the on-water-stressed version of A
+  mutate(cA_tot = `cA_tot-w`) %>%
   mutate(
     year_start = 2001,
     year_end = 2014,
