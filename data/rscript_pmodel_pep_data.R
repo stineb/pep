@@ -25,7 +25,7 @@ df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") 
     lon = LON,
     lat = LAT,
     sitename = timeseries) %>%
-  select(
+  dplyr::select(
     lon, lat, sitename 
   ) %>%
   unique() %>%
