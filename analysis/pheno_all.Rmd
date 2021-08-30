@@ -104,6 +104,34 @@ ggplot_year_anet <- function(x, y){
     labs(x = "Year", y = "EOS (DOY)")
   return(gg)
 }
+
+ggplot_mean_gpp_net <- function(x){
+  df <- tibble(upper = x$`scale(mean_gpp_net)`$upper[,1],
+               lower = x$`scale(mean_gpp_net)`$lower[,1],
+               off = x$`scale(mean_gpp_net)`$fit[,1],
+               mean_gpp_net = x$`scale(mean_gpp_net)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = mean_gpp_net, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(mean_gpp_net, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = expression(paste("Mean " ,italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
+  return(gg)
+}
+
+ggplot_anom_gpp_net <- function(x){
+  df <- tibble(upper = x$`scale(anom_gpp_net)`$upper[,1],
+               lower = x$`scale(anom_gpp_net)`$lower[,1],
+               off   = x$`scale(anom_gpp_net)`$fit[,1],
+               anom_gpp_net = x$`scale(anom_gpp_net)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = anom_gpp_net, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(anom_gpp_net, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = expression(paste("Anomalies " ,italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
+  
+  return(gg)
+}
+
 ```
 
 ## Load data
@@ -126,33 +154,6 @@ Taking uncorrected Zani
 df_anl_Zani <- df
 ```
 
-Correct Zani EOS dates
-```{r}
-## what does the original data say?
-load("~/data/pep/processed/df_PEP725_alldata.RData") # loads 'df'
-
-df_orig <- df %>% 
-  dplyr::filter(phase_id %in% c(10, 11, 13, 95, 205)) %>% 
-  mutate(pheno = ifelse(phase_id %in% c(10, 11, 13), "on", ifelse(phase_id %in% c(95, 205), "off", NA))) %>% 
-  rename(id_site = s_id)
-
-## take the mean across inconsistent duplicates. 3,223,360 -> 2,987,845 data points.
-df_orig <- df_orig %>% 
-  dplyr::select(id_site, species, year, pheno, day) %>% 
-  group_by(id_site, species, year, pheno) %>% 
-  summarise(day = round(mean(day), 0))
-
-df_orig_wide <- df_orig %>% 
-   pivot_wider(names_from = "pheno", values_from = "day")
-
-df_anl <- df_anl %>% 
-  rename(on_zani = on, off_zani = off) %>% 
-  left_join(df_orig_wide, by = c("id_site", "species", "year"))
-
-out <- df_anl %>% analyse_modobs2("off", "off_zani", type = "heat")
-out$gg
-```
-
 ### P-model outputs data
 
 Data from PEP pheno and P-model photosynthesis
@@ -162,7 +163,7 @@ load("~/data/pep/processed/df_pmodel_zani.RData")
 
 df_anl <- df_pmodel_zani %>% 
   unnest(out_pmodel) %>% 
-  right_join(df_anl, by = c("id_species_site", "year")) %>% 
+  right_join(df_anl_Zani, by = c("id_species_site", "year")) %>% 
   mutate(gpp_net = gpp - rd,
          lue = gpp / apar)
 ```
@@ -180,16 +181,16 @@ Data from MODIS pheno and P-model photosynthesis
 
 ```{r}
 # Read phenology dates from MODIS
-modis_pheno_sites <- readRDS("~/pep/data/modis_pheno_sites.rds")
+modis_pheno_sites <- readRDS("~/pep/data/modis_phenology/modis_pheno_sites.rds")
 # Read p-model outputs
-modis_pmodel <- readRDS("~/pep/data/modis_pmodel_output.rds")
+modis_pmodel <- readRDS("~/pep/data/pmodel_output/modis_pmodel_output.rds")
 modis_pmodel <- modis_pmodel %>% mutate(gpp_net = gpp - rd, lue = gpp / apar)
 # Join datasets
 df_anl_modis <- modis_pheno_sites %>% 
   left_join(modis_pmodel[,2:10], by = c("lon","lat","year"))
 # Change variable names
-df_anl_modis <- df_anl_modis %>% rename(on = SOS_doy, off = EOS_doy)
-df_anl_modis <- df_anl_modis %>% filter(off>on)
+df_anl_modis <- df_anl_modis %>% rename(on = SOS_2_doy, off = EOS_2_doy) # Select the band
+#df_anl_modis <- df_anl_modis %>% filter(off>on)
 ```
 
 ## Data volume
@@ -766,10 +767,18 @@ df_anl_modis <- df_anl_modis %>%
   unnest(data)
 
 ## gpp_net
-Fit_LT_anom = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
-summary(Fit_LT_anom)
-plot(allEffects(Fit_LT_anom))
-r.squaredGLMM(Fit_LT_anom)
+fit_lt_modis_anom = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
+summary(fit_lt_modis_anom)
+plot(allEffects(fit_lt_modis_anom))
+r.squaredGLMM(fit_lt_modis_anom)
+
+aic_lt_modis_anom <- AIC(fit_lt_modis_anom)
+out_plot_lt <- allEffects(fit_lt_modis_anom)
+gg_lt_modis_mean <- ggplot_mean_gpp_net(out_plot_lt)
+gg_lt_modis_anom <- ggplot_anom_gpp_net(out_plot_lt)
+gg_lt_modis_year <- ggplot_year(out_plot_lt)
+
+gg_lt_modis_mean + gg_lt_modis_anom + gg_lt_modis_year
 
 ```
 
