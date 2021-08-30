@@ -122,7 +122,7 @@ df_anl <- df
 Correct Zani EOS dates
 ```{r}
 ## what does the original data say?
-load("data/df_PEP725_alldata.RData") # loads 'df'
+load("~/data/pep/processed/df_PEP725_alldata.RData") # loads 'df'
 df_orig <- df %>% 
   dplyr::filter(phase_id %in% c(10, 11, 13, 95, 205)) %>% 
   mutate(pheno = ifelse(phase_id %in% c(10, 11, 13), "on", ifelse(phase_id %in% c(95, 205), "off", NA))) %>% 
@@ -147,7 +147,7 @@ out$gg
 
 Add P-model outputs.
 ```{r}
-load("data/df_pmodel_zani.RData")
+load("~/data/pep/processed/df_pmodel_zani.RData")
 
 df_anl <- df_pmodel_zani %>% 
   unnest(out_pmodel) %>% 

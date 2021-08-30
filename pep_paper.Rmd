@@ -129,7 +129,8 @@ df_anl_Zani <- df
 Correct Zani EOS dates
 ```{r}
 ## what does the original data say?
-load("data/df_PEP725_alldata.RData") # loads 'df'
+load("~/data/pep/processed/df_PEP725_alldata.RData") # loads 'df'
+
 df_orig <- df %>% 
   dplyr::filter(phase_id %in% c(10, 11, 13, 95, 205)) %>% 
   mutate(pheno = ifelse(phase_id %in% c(10, 11, 13), "on", ifelse(phase_id %in% c(95, 205), "off", NA))) %>% 
@@ -157,7 +158,7 @@ out$gg
 Data from PEP pheno and P-model photosynthesis
 
 ```{r}
-load("data/df_pmodel_zani.RData")
+load("~/data/pep/processed/df_pmodel_zani.RData")
 
 df_anl <- df_pmodel_zani %>% 
   unnest(out_pmodel) %>% 
@@ -188,6 +189,7 @@ df_anl_modis <- modis_pheno_sites %>%
   left_join(modis_pmodel[,2:10], by = c("lon","lat","year"))
 # Change variable names
 df_anl_modis <- df_anl_modis %>% rename(on = SOS_doy, off = EOS_doy)
+df_anl_modis <- df_anl_modis %>% filter(off>on)
 ```
 
 ## Data volume
@@ -431,6 +433,7 @@ separate_anom <- function(df){
     mutate(mean_cA_tot = df_mean$mean_cA_tot,
            anom_cA_tot = cA_tot - df_mean$mean_cA_tot)
 }
+
 df_anl_Zani <- df_anl_Zani %>% 
   group_by(id_species_site) %>% 
   nest() %>% 
@@ -642,11 +645,12 @@ Long-term trend in SOS.
 ```{r}
 fit_on_year <- lmer(on ~ scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
 summary(fit_on_year)
+r.squaredGLMM(fit_on_year)
+plot(allEffects(fit_on_year))
 
 out_plot <- allEffects(fit_on_year)
 gg_modis_on_year <- ggplot_year(out_plot)
-gg_modis_on_year <- gg_modis_on_year + ylab("SOS (DOY)") + 
-  theme(plot.background = element_rect(fill = "grey80"))
+gg_modis_on_year <- gg_modis_on_year + ylab("SOS (DOY)") 
 gg_modis_on_year
 ```
 
@@ -684,8 +688,7 @@ plot(allEffects(fit_anet_year))
 out_plot_anet <- allEffects(fit_anet_year)
 gg_lt_anet_year <- ggplot_year(out_plot_anet)
 gg_lt_anet_year <- gg_lt_anet_year + 
-  labs(y = expression(italic("A")[net])) + 
-  theme(plot.background = element_rect(fill = "grey80"))
+  labs(y = expression(italic("A")[net]))
 gg_lt_anet_year
 ```
 
@@ -741,14 +744,14 @@ gg_dual_modis
 
 This is based on a spatially stratified sampling.
 
-#### Anet P-model
+#### Anet MODIS P-model
 
-Separate mean across years 1970-2000 from interannual anomaly.
+Separate mean across years 2001-2018 from interannual anomaly.
 
 ```{r eval=FALSE}
 separate_anom <- function(df){
   df_mean <- df %>% 
-    #dplyr::filter(year %in% 1970:2000) %>% 
+    #dplyr::filter(year %in% 2001:2018) %>% 
     summarise(mean_off = mean(off, na.rm = TRUE), 
               mean_gpp_net = mean(gpp_net, na.rm = TRUE))
   df %>% 
@@ -761,6 +764,13 @@ df_anl_modis <- df_anl_modis %>%
   nest() %>% 
   mutate(data = map(data, ~separate_anom(.))) %>% 
   unnest(data)
+
+## gpp_net
+Fit_LT_anom = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
+summary(Fit_LT_anom)
+plot(allEffects(Fit_LT_anom))
+r.squaredGLMM(Fit_LT_anom)
+
 ```
 
 Bootstrap 300 samples and test for significance in the mean Anet coefficient. This returns a data frame containing the coefficient estimate and the p-value for each sample.
@@ -860,3 +870,38 @@ ggsave("~/pep/Sup_fig_1_zz.png", width = 11, height = 4)
 
 ```
 
+## Figure 2
+
+```{r}
+gg_iav_modis_gppnet <- gg_iav_modis_gppnet +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "MODIS data and P-model")
+
+gg_lt_modis_gppnet <- gg_lt_modis_gppnet +
+  labs(title = expression(paste("EOS ~ ", bolditalic("A")[bold(net)], " + Year")), subtitle = "MODIS data and P-model")
+
+gg_lt_modis_year <- gg_lt_modis_year +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), subtitle = "MODIS data and P-model")
+
+pp <- (gg_iav_modis_gppnet + gg_lt_modis_gppnet + gg_lt_modis_year)
+pp + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/fig_2_modis.png", width = 11, height = 4)
+
+# With p-model outputs
+pp <- (gg_iav_zz_cAtot + gg_lt_zz_cAtot + gg_lt_zz_year)/(gg_iav_pm_cAtot + gg_lt_pm_gppnet + gg_lt_pm_year)
+pp + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/fig_1_zz.png", width = 11, height = 4)
+
+# With dual plot
+pp <- (gg_iav_zz_cAtot + gg_lt_zz_anet + gg_dual_zz)
+pp + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/fig_1_wrapup_zz.png", width = 12, height = 4)
+
+pp <- (gg_iav_zz_cAtot + gg_lt_zz_anet + gg_dual_zz) /
+  (gg_iav_pm + gg_lt_pm_anet + gg_dual_pm)
+pp + plot_annotation(
+  title = expression(paste("EOS ~ SOS")),
+  tag_levels = 'A'
+)
+ggsave("~/pep/fig_1.png", width = 12, height = 4)
+
+```
