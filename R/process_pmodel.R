@@ -5,7 +5,7 @@
 #' @param file pmodel driver file or data frame
 #' @param agg aggregate the output 
 
-process_pmodel_modis <- function(
+process_pmodel <- function(
   file,
   agg = TRUE
   ){
@@ -86,17 +86,18 @@ process_pmodel_modis <- function(
       daylength = geosphere::daylength(lat, doy)
     )
   
-  # don't accumulate after daylength falls below 11 h
-  df_out <- df_out %>%
-    mutate(
-      gpp = ifelse(daylength < 11, 0, gpp),
-      apar = ifelse(daylength < 11, 0, apar),
-      alpha = ifelse(daylength < 11, NA, alpha),
-      rd = ifelse(daylength < 11, 0, rd)
-    )
-  
   # aggregate if so desired
   if (agg){
+    
+    # don't accumulate after daylength falls below 11 h
+    df_out <- df_out %>%
+      mutate(
+        gpp = ifelse(daylength < 11, 0, gpp),
+        apar = ifelse(daylength < 11, 0, apar),
+        alpha = ifelse(daylength < 11, NA, alpha),
+        rd = ifelse(daylength < 11, 0, rd)
+      )
+    
     df_out <- df_out %>% 
       group_by(sitename, lat, lon, year) %>% 
       summarise(
