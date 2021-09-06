@@ -1,0 +1,1012 @@
+---
+title: "Analysis for the phenology paper"
+author: "Laura Marques"
+date: "8/17/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(broom)
+library(rbeni)
+library(lme4) #lmer
+library(MuMIn) #r.squaredGLMM
+library(lmerTest) #p-values
+library(effects) #plot effects
+library(sjPlot) #plot effects
+library(patchwork)
+
+## functions to convert lmer effects plots to ggplot objects
+ggplot_on <- function(x){
+  df <- tibble(upper = x$`scale(on)`$upper[,1],
+               lower = x$`scale(on)`$lower[,1],
+               off = x$`scale(on)`$fit[,1],
+               on = x$`scale(on)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = on, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(on, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = "SOS (DOY)", y = "EOS (DOY)")
+  return(gg)
+}
+
+ggplot_year <- function(x){
+  df <- tibble(upper = x$`scale(year)`$upper[,1],
+               lower = x$`scale(year)`$lower[,1],
+               off = x$`scale(year)`$fit[,1],
+               year = x$`scale(year)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(year, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = "Year", y = "EOS (DOY)")
+  return(gg)
+}
+
+ggplot_year0 <- function(x){
+  df <- tibble(upper = x$`year`$upper[,1],
+               lower = x$`year`$lower[,1],
+               off = x$`year`$fit[,1],
+               year = x$`year`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(year, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = "Year", y = "EOS (DOY)")
+  return(gg)
+}
+
+ggplot_cA_tot <- function(x){
+  df <- tibble(upper = x$`scale(cA_tot)`$upper[,1],
+               lower = x$`scale(cA_tot)`$lower[,1],
+               off = x$`scale(cA_tot)`$fit[,1],
+               cA_tot = x$`scale(cA_tot)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = cA_tot, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(cA_tot, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
+  
+  return(gg)
+}
+
+ggplot_gpp_net <- function(x){
+  df <- tibble(upper = x$`scale(gpp_net)`$upper[,1],
+               lower = x$`scale(gpp_net)`$lower[,1],
+               off   = x$`scale(gpp_net)`$fit[,1],
+               gpp_net = x$`scale(gpp_net)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = gpp_net, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(gpp_net, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
+  
+  return(gg)
+}
+
+ggplot_year_anet <- function(x, y){
+  df <- tibble(upper = x$`scale(year)`$upper[,1],
+               lower = x$`scale(year)`$lower[,1],
+               off = x$`scale(year)`$fit[,1],
+               year = x$`scale(year)`$x[,1]) %>% 
+    bind_rows(
+      tibble(upper = y$`scale(year)`$upper[,1],
+             lower = y$`scale(year)`$lower[,1],
+             anet   = y$`scale(year)`$fit[,1],
+             year = y$`scale(year)`$x[,1])
+    )
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(year, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = "Year", y = "EOS (DOY)")
+  return(gg)
+}
+
+ggplot_mean_cA_tot <- function(x){
+  df <- tibble(upper = x$`scale(mean_cA_tot)`$upper[,1],
+               lower = x$`scale(mean_cA_tot)`$lower[,1],
+               off = x$`scale(mean_cA_tot)`$fit[,1],
+               mean_cA_tot = x$`scale(mean_cA_tot)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = mean_cA_tot, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(mean_cA_tot, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = expression(paste("Mean " ,italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
+  return(gg)
+}
+
+ggplot_anom_cA_tot <- function(x){
+  df <- tibble(upper = x$`scale(anom_cA_tot)`$upper[,1],
+               lower = x$`scale(anom_cA_tot)`$lower[,1],
+               off   = x$`scale(anom_cA_tot)`$fit[,1],
+               anom_cA_tot = x$`scale(anom_cA_tot)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = anom_cA_tot, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(anom_cA_tot, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = expression(paste("Anomalies " ,italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
+  
+  return(gg)
+}
+
+ggplot_mean_gpp_net <- function(x){
+  df <- tibble(upper = x$`scale(mean_gpp_net)`$upper[,1],
+               lower = x$`scale(mean_gpp_net)`$lower[,1],
+               off = x$`scale(mean_gpp_net)`$fit[,1],
+               mean_gpp_net = x$`scale(mean_gpp_net)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = mean_gpp_net, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(mean_gpp_net, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = expression(paste("Mean " ,italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
+  return(gg)
+}
+
+ggplot_anom_gpp_net <- function(x){
+  df <- tibble(upper = x$`scale(anom_gpp_net)`$upper[,1],
+               lower = x$`scale(anom_gpp_net)`$lower[,1],
+               off   = x$`scale(anom_gpp_net)`$fit[,1],
+               anom_gpp_net = x$`scale(anom_gpp_net)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = anom_gpp_net, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(anom_gpp_net, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = expression(paste("Anomalies " ,italic("A")[net], " (gC m"^-2, " yr"^-1, ")")), y = "EOS (DOY)")
+  
+  return(gg)
+}
+
+```
+
+## Load data
+
+### Zani et al. data
+
+Data from PEP pheno and LPJ-GUESS photosynthesis
+
+Read the data complemented with drivers, obtained from Constantin Zohner (7.12.2020).
+```{r}
+df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
+  as_tibble() %>% 
+  rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
+         anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
+         species = Species, id_site = PEP_ID, id_species_site = timeseries)
+```
+
+Taking uncorrected Zani
+```{r}
+df_anl <- df
+```
+
+Correct Zani EOS dates with original PEP725.
+The ON and OFF variables used in the model come from the original PEP725 database filtered as in ZZ.
+```{r}
+## what does the original data say?
+load("~/data/pep/processed/df_PEP725_alldata.RData") # loads 'df'
+df_orig <- df %>% 
+  dplyr::filter(phase_id %in% c(10, 11, 13, 95, 205)) %>% 
+  mutate(pheno = ifelse(phase_id %in% c(10, 11, 13), "on", ifelse(phase_id %in% c(95, 205), "off", NA))) %>% 
+  rename(id_site = s_id)
+
+## take the mean across inconsistent duplicates. 3,223,360 -> 2,987,845 data points.
+df_orig <- df_orig %>% 
+  dplyr::select(id_site, species, year, pheno, day) %>% 
+  group_by(id_site, species, year, pheno) %>% 
+  summarise(day = round(mean(day), 0))
+
+df_orig_wide <- df_orig %>% 
+   pivot_wider(names_from = "pheno", values_from = "day")
+
+# Merge ZZ with original PEP725
+df_anl <- df_anl %>% 
+  rename(on_zani = on, off_zani = off) %>% 
+  left_join(df_orig_wide, by = c("id_site", "species", "year"))
+
+out <- df_anl %>% analyse_modobs2("off", "off_zani", type = "heat")
+out$gg
+```
+
+### P-model outputs data
+
+Data from PEP pheno and P-model photosynthesis
+Add P-model outputs to the databaset
+
+```{r}
+load("~/data/pep/processed/df_pmodel_zani.RData")
+
+df_anl <- df_pmodel_zani %>% 
+  unnest(out_pmodel) %>% 
+  right_join(df_anl, by = c("id_species_site", "year")) %>% 
+  mutate(gpp_net = gpp - rd,
+         lue = gpp / apar)
+```
+
+Check consistency of P-model and LPJ-GUESS GPP.
+```{r}
+out <- df_anl %>% 
+  analyse_modobs2("cA_tot", "gpp_net", type = "heat")
+out$gg
+```
+
+### MODIS P-model outputs
+
+Data from MODIS pheno and P-model photosynthesis
+
+```{r}
+# Read phenology dates from MODIS
+modis_pheno_sites <- readRDS("~/pep/data/modis_phenology/modis_pheno_sites.rds")
+# Read p-model outputs
+modis_pmodel <- readRDS("~/pep/data/pmodel_output/modis_pmodel_output.rds")
+modis_pmodel <- modis_pmodel %>% mutate(gpp_net = gpp - rd, lue = gpp / apar)
+# Join datasets
+df_anl_modis <- modis_pheno_sites %>% 
+  left_join(modis_pmodel[,2:10], by = c("lon","lat","year"))
+# Change variable names
+df_anl_modis <- df_anl_modis %>% rename(on = SOS_2_doy, off = EOS_2_doy) # Select the pheno band
+df_anl_modis <- df_anl_modis %>% filter(off>on)
+```
+
+## Data volume
+
+Distribution of number of data points per time series.
+```{r}
+df_ndata <- df_anl %>% 
+  group_by(id_species_site) %>% 
+  summarise(count = n())
+
+quantile(df_ndata$count, probs = c(0.5, 0.9))
+
+df_ndata %>% 
+  ggplot(aes(count, ..count..)) +
+  geom_histogram(bins = 20) +
+  xlab("N data points per time series (years)") +
+  labs(title = "PEP725 phenology time series lengthts")
+```
+
+## Zani et al. data
+
+### Interannual variation (IAV)
+
+#### Start-of-Season (SOS)
+
+```{r}
+fit_iav_pep_off_vs_on = lmer(off ~ scale(on) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+summary(fit_iav_pep_off_vs_on)
+r.squaredGLMM(fit_iav_pep_off_vs_on)
+plot(allEffects(fit_iav_pep_off_vs_on))
+
+aic_iav_pep_off_vs_on <- AIC(fit_iav_pep_off_vs_on)
+out_iav_pep_off_vs_on <- allEffects(fit_iav_pep_off_vs_on)
+gg_iav_pep_off_vs_on <- ggplot_on(out_iav_pep_off_vs_on)
+gg_iav_pep_off_vs_on
+```
+
+#### Anet LPJ (Fig 1A)
+
+```{r}
+fit_iav_pep_off_vs_cAtot = lmer(off ~ scale(cA_tot) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+summary(fit_iav_pep_off_vs_cAtot)
+r.squaredGLMM(fit_iav_pep_off_vs_cAtot)
+plot(allEffects(fit_iav_pep_off_vs_cAtot))
+
+aic_iav_pep_off_vs_cAtot <- AIC(fit_iav_pep_off_vs_cAtot)
+out_iav_pep_off_vs_cAtot <- allEffects(fit_iav_pep_off_vs_cAtot)
+gg_iav_pep_off_vs_cAtot <- ggplot_cA_tot(out_iav_pep_off_vs_cAtot)
+gg_iav_pep_off_vs_cAtot
+```
+
+### Long-term (year)
+
+#### SOS
+
+```{r}
+fit_lt_pep_off_vs_on_year = lmer(off ~ scale(on) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(fit_lt_pep_off_vs_on_year)
+r.squaredGLMM(fit_lt_pep_off_vs_on_year)
+plot(allEffects(fit_lt_pep_off_vs_on_year))
+
+aic_lt_pep_off_vs_on_year <- AIC(fit_lt_pep_off_vs_on_year)
+out_lt_pep_off_vs_on_year <- allEffects(fit_lt_pep_off_vs_on_year)
+gg_lt_pep_off_vs_on   <- ggplot_on(out_lt_pep_off_vs_on_year)
+gg_lt_pep_off_vs_year1 <- ggplot_year(out_lt_pep_off_vs_on_year)
+
+gg_lt_pep_off_vs_on + gg_lt_pep_off_vs_year1
+```
+
+Long-term trend in SOS.
+
+```{r}
+fit_lt_pep_on_vs_year <- lmer(on ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(fit_lt_pep_on_vs_year)
+
+out_lt_pep_on_vs_year <- allEffects(fit_lt_pep_on_vs_year)
+gg_lt_pep_on_vs_year <- ggplot_year(out_lt_pep_on_vs_year)
+gg_lt_pep_on_vs_year <- gg_lt_pep_on_vs_year + ylab("SOS (DOY)") 
+gg_lt_pep_on_vs_year
+```
+
+#### Anet LPJ (New Fig 1B and 1C, old Fig 1C and 1D)
+
+```{r}
+fit_lt_pep_off_vs_cAtot_year = lmer(off ~ scale(cA_tot) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(fit_lt_pep_off_vs_cAtot_year)
+r.squaredGLMM(fit_lt_pep_off_vs_cAtot_year)
+plot(allEffects(fit_lt_pep_off_vs_cAtot_year))
+
+aic_lt_pep_off_vs_cAtot_year <- AIC(fit_lt_pep_off_vs_cAtot_year)
+out_lt_pep_off_vs_cAtot_year <- allEffects(fit_lt_pep_off_vs_cAtot_year)
+gg_lt_pep_off_vs_cAtot <- ggplot_cA_tot(out_lt_pep_off_vs_cAtot_year)
+gg_lt_pep_off_vs_year2 <- ggplot_year(out_lt_pep_off_vs_cAtot_year)
+
+gg_lt_pep_off_vs_cAtot + gg_lt_pep_off_vs_year2
+```
+
+Is this better model than EOS ~ Anet?
+
+```{r}
+out_anova <- anova(fit_iav_pep_cAtot, fit_lt_pep_cAtot)
+out_anova
+```
+
+#### Long-term trend in Anet.(New Fig 1C red, old Fig 1D red)
+
+```{r}
+fit_lt_pep_cAtot_vs_year <- lmer(cA_tot ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(fit_lt_pep_cAtot_vs_year)
+plot(allEffects(fit_lt_pep_cAtot_vs_year))
+
+out_lt_pep_cAtot_vs_year <- allEffects(fit_lt_pep_cAtot_vs_year)
+gg_lt_pep_cAtot_vs_year <- ggplot_year(out_lt_pep_cAtot_vs_year)
+gg_lt_pep_cAtot_vs_year <- gg_lt_pep_cAtot_vs_year + 
+  labs(y = expression(italic("A")[net]))
+gg_lt_pep_cAtot_vs_year
+```
+
+##### Plot dual figure
+
+```{r}
+ggplot_year_cAtot <- function(x, y){
+  
+  df1 <- tibble(upper = x$`scale(year)`$upper[,1],
+               lower = x$`scale(year)`$lower[,1],
+               off = x$`scale(year)`$fit[,1],
+               year = x$`scale(year)`$x[,1])
+  df2 <- tibble(upper = y$`scale(year)`$upper[,1],
+             lower = y$`scale(year)`$lower[,1],
+             anet = y$`scale(year)`$fit[,1],
+             year = y$`scale(year)`$x[,1])
+  
+  coef <- 0.7 * mean(df1$off) / mean(df2$anet)
+  
+  # library(grid)
+  # t1 <- textGrob(expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), x = 0, y = 1.1, gp = gpar(col = "black"))
+  
+  gg <- ggplot() + 
+    geom_ribbon(data = df1, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df1, aes(x = year, y = off), col = "royalblue") +
+    
+    geom_ribbon(data = df2, aes(x = year, ymin = lower * coef + 100, ymax = upper * coef + 100), alpha = 0.2) +
+    geom_line(data = df2, aes(x = year, y = anet * coef + 100), col = "red") +
+    scale_y_continuous(name = "EOS (DOY)",
+                       sec.axis = sec_axis( ~(. - 100) / coef, name = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")))) +
+    labs(x = "Year", 
+         title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"), "      ", italic("A")[net], " ~ Year")), 
+         subtitle = "PEP data and LPJ-GUESS") +
+    theme_classic() +
+    # annotation_custom(grobTree(t1)) +
+    theme(axis.text.y.right = element_text(colour="red"),
+          axis.ticks.y.right = element_line(colour="red"),
+          axis.title.y.right = element_text(colour="red"),
+          axis.text.y = element_text(colour="royalblue"),
+          axis.ticks.y = element_line(colour="royalblue"),
+          axis.title.y = element_text(colour="royalblue"),
+          axis.line.y = element_line(colour = "royalblue"),
+          axis.line.y.right = element_line(colour = "red"))
+  
+  return(gg)
+}
+
+gg_dual_pep_cAtot <- ggplot_year_cAtot(x = out_lt_pep_off_vs_cAtot_year, y = out_lt_pep_cAtot_vs_year)
+gg_dual_pep_cAtot
+```
+
+### IAV vs. long-term vs. mean
+
+This is based on a spatially stratified sampling.
+
+#### Anet LPJ
+
+Separate mean across years 1970-2000 from interannual anomaly.
+```{r eval=FALSE}
+separate_anom <- function(df){
+  df_mean <- df %>% 
+    dplyr::filter(year %in% 1970:2000) %>% 
+    summarise(mean_off = mean(off, na.rm = TRUE), 
+              mean_cA_tot = mean(cA_tot, na.rm = TRUE))
+  df %>% 
+    mutate(mean_cA_tot = df_mean$mean_cA_tot,
+           anom_cA_tot = cA_tot - df_mean$mean_cA_tot)
+}
+
+df_anl <- df_anl %>% 
+  group_by(id_species_site) %>% 
+  nest() %>% 
+  mutate(data = map(data, ~separate_anom(.))) %>% 
+  unnest(data)
+
+fit_lt_pep_anom_cAtot = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(fit_lt_pep_anom_cAtot)
+plot(allEffects(fit_lt_pep_anom_cAtot))
+r.squaredGLMM(fit_lt_pep_anom_cAtot)
+
+aic_lt_pep_anom_cAtot <- AIC(fit_lt_pep_anom_cAtot)
+out_lt_pep_anom_cAtot <- allEffects(fit_lt_pep_anom_cAtot)
+gg_lt_pep_mean_cAtot <- ggplot_mean_cA_tot(out_lt_pep_anom_cAtot)
+gg_lt_pep_anom_cAtot <- ggplot_anom_cA_tot(out_lt_pep_anom_cAtot)
+gg_lt_pep_anom_year   <- ggplot_year(out_lt_pep_anom_cAtot)
+
+gg_lt_pep_mean_cAtot + gg_lt_pep_anom_cAtot + gg_lt_pep_anom_year
+
+```
+
+Bootstrap 300 samples and test for significance in the mean Anet coefficient. This returns a data frame containing the coefficient estimate and the p-value for each sample.
+
+```{r eval=FALSE}
+get_pval_mean_anet <- function(use_seed, df){
+  
+  ## sample one time series per gridcell
+  set.seed(use_seed)
+  df_sites_sampled <- df %>% 
+    dplyr::select(id_species_site, lon_mid, lat_mid) %>% 
+    distinct() %>% 
+    group_by(lon_mid, lat_mid) %>% 
+    sample_n(1)
+  df <- df %>% 
+    dplyr::filter(id_species_site %in% df_sites_sampled$id_species_site)
+  
+  ## fit model separating mean Anet
+  Fit_LT_anom = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) + (1|id_site) + (1|species), data = df, na.action = "na.exclude")
+  
+  ## return p value for significance of term representing mean Anet
+  out_sum <- summary(Fit_LT_anom)
+  pval <- out_sum$coefficients["scale(mean_cA_tot)", "Pr(>|t|)"]
+  esti <- out_sum$coefficients["scale(mean_cA_tot)", "Estimate"]
+  
+  return(tibble(estimate = esti, pval = pval))
+}
+
+n_samples <- 300
+df_sampled_mean_anet <- purrr::map_dfr(as.list(seq(n_samples)), ~get_pval_mean_anet(., df_anl))
+
+df_sampled_mean_anet %>% 
+  ggplot(aes(estimate, ..count..)) +
+  geom_histogram()
+
+n_sign <- df_sampled_mean_anet %>% 
+  dplyr::filter(pval < 0.05) %>% 
+  nrow()
+
+## fraction not significant
+1 - n_sign/n_samples
+```
+
+## P-model data
+
+### Interannual variation (IAV)
+
+#### Anet P-model (Fig 1D)
+
+```{r}
+fit_iav_pep_off_vs_gppnet = lmer(off ~ scale(gpp_net) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+summary(fit_iav_pep_off_vs_gppnet)
+r.squaredGLMM(fit_iav_pep_off_vs_gppnet)
+plot(allEffects(fit_iav_pep_off_vs_gppnet))
+
+aic_iav_pep_off_vs_gppnet <- AIC(fit_iav_pep_off_vs_gppnet)
+out_pep_off_vs_gppnet <- allEffects(fit_iav_pep_off_vs_gppnet)
+gg_iav_pep_off_vs_gppnet <- ggplot_gpp_net(out_pep_off_vs_gppnet)
+gg_iav_pep_off_vs_gppnet
+```
+
+### Long-term (year)
+
+#### Anet P-model (New Fig 1E and 1F)
+
+```{r}
+fit_lt_pep_off_vs_gppnet_year = lmer(off ~ scale(gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(fit_lt_pep_off_vs_gppnet_year)
+r.squaredGLMM(fit_lt_pep_off_vs_gppnet_year)
+plot(allEffects(fit_lt_pep_off_vs_gppnet_year))
+
+aic_lt_pep_off_vs_gppnet_year <- AIC(fit_lt_pep_off_vs_gppnet_year)
+out_pep_off_vs_gppnet_year <- allEffects(fit_lt_pep_off_vs_gppnet_year)
+gg_lt_pep_off_vs_gppnet <- ggplot_gpp_net(out_pep_off_vs_gppnet_year)
+gg_lt_pep_off_vs_year3 <- ggplot_year(out_pep_off_vs_gppnet_year)
+
+gg_lt_pep_off_vs_gppnet + gg_lt_pep_off_vs_year3
+```
+
+Is this better model than EOS ~ Anet?
+
+```{r}
+out_anova <- anova(fit_iav_pm_gppnet, fit_lt_pm_gppnet)
+out_anova
+```
+
+#### Long-term trend in Anet.(New Fig 1F red)
+
+```{r}
+fit_lt_pep_gppnet_vs_year <- lmer(gpp_net ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(fit_lt_pep_gppnet_vs_year)
+plot(allEffects(fit_lt_pep_gppnet_vs_year))
+
+out_lt_pep_gppnet_vs_year <- allEffects(fit_lt_pep_gppnet_vs_year)
+gg_lt_pep_gppnet_vs_year <- ggplot_year(out_lt_pep_gppnet_vs_year)
+gg_lt_pep_gppnet_vs_year <- gg_lt_pep_gppnet_vs_year + labs(y = expression(italic("A")[net])) 
+gg_lt_pep_gppnet_vs_year
+
+```
+
+##### Plot dual figure
+
+```{r}
+ggplot_year_anet <- function(x, y){
+  
+  df1 <- tibble(upper = x$`scale(year)`$upper[,1],
+               lower = x$`scale(year)`$lower[,1],
+               off = x$`scale(year)`$fit[,1],
+               year = x$`scale(year)`$x[,1])
+  df2 <- tibble(upper = y$`scale(year)`$upper[,1],
+             lower = y$`scale(year)`$lower[,1],
+             anet = y$`scale(year)`$fit[,1],
+             year = y$`scale(year)`$x[,1])
+  
+  coef <- 0.7 * mean(df1$off) / mean(df2$anet)
+  
+  # library(grid)
+  # t1 <- textGrob(expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), x = 0, y = 1.1, gp = gpar(col = "black"))
+  
+  gg <- ggplot() + 
+    geom_ribbon(data = df1, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df1, aes(x = year, y = off), col = "royalblue") +
+    
+    geom_ribbon(data = df2, aes(x = year, ymin = lower * coef + 100, ymax = upper * coef + 100), alpha = 0.2) +
+    geom_line(data = df2, aes(x = year, y = anet * coef + 100), col = "red") +
+    scale_y_continuous(name = "EOS (DOY)",
+                       sec.axis = sec_axis( ~(. - 100) / coef, name = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")))) +
+    labs(x = "Year", 
+         title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"), "      ", italic("A")[net], " ~ Year")), 
+         subtitle = "PEP data and P-model") +
+    theme_classic() +
+    # annotation_custom(grobTree(t1)) +
+    theme(axis.text.y.right = element_text(colour="red"),
+          axis.ticks.y.right = element_line(colour="red"),
+          axis.title.y.right = element_text(colour="red"),
+          axis.text.y = element_text(colour="royalblue"),
+          axis.ticks.y = element_line(colour="royalblue"),
+          axis.title.y = element_text(colour="royalblue"),
+          axis.line.y = element_line(colour = "royalblue"),
+          axis.line.y.right = element_line(colour = "red"))
+  
+  return(gg)
+}
+
+gg_dual_pep_gppnet <- ggplot_year_anet(x = out_pep_off_vs_gppnet_year, y = out_lt_pep_gppnet_vs_year)
+gg_dual_pep_gppnet
+```
+
+### IAV vs. long-term vs. mean
+
+This is based on a spatially stratified sampling.
+
+#### Anet Pmodel
+
+Separate mean across years 1970-2000 from interannual anomaly.
+```{r eval=FALSE}
+separate_anom <- function(df){
+  df_mean <- df %>% 
+    dplyr::filter(year %in% 1970:2000) %>% 
+    summarise(mean_off = mean(off, na.rm = TRUE), 
+              mean_gpp_net = mean(gpp_net, na.rm = TRUE))
+  df %>% 
+    mutate(mean_gpp_net = df_mean$mean_gpp_net,
+           anom_gpp_net = gpp_net - df_mean$mean_gpp_net)
+}
+
+df_anl <- df_anl %>% 
+  group_by(id_species_site) %>% 
+  nest() %>% 
+  mutate(data = map(data, ~separate_anom(.))) %>% 
+  unnest(data)
+
+fit_lt_pep_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+summary(fit_lt_pep_anom_gppnet)
+plot(allEffects(fit_lt_pep_anom_gppnet))
+r.squaredGLMM(fit_lt_pep_anom_gppnet)
+
+aic_lt_pep_anom_gppnet <- AIC(fit_lt_pep_anom_gppnet)
+out_lt_pep_anom_gppnet <- allEffects(fit_lt_pep_anom_gppnet)
+gg_lt_pep_mean_gppnet <- ggplot_mean_gpp_net(out_lt_pep_anom_gppnet)
+gg_lt_pep_anom_gppnet <- ggplot_anom_gpp_net(out_lt_pep_anom_gppnet)
+gg_lt_pep_anom_year   <- ggplot_year(out_lt_pep_anom_gppnet)
+
+gg_lt_pep_mean_gppnet + gg_lt_pep_anom_gppnet + gg_lt_pep_anom_year
+```
+
+Bootstrap 300 samples and test for significance in the mean Anet coefficient. This returns a data frame containing the coefficient estimate and the p-value for each sample.
+
+```{r eval=FALSE}
+get_pval_mean_anet <- function(use_seed, df){
+  
+  ## sample one time series per gridcell
+  set.seed(use_seed)
+  df_sites_sampled <- df %>% 
+    dplyr::select(id_species_site, lon_mid, lat_mid) %>% 
+    distinct() %>% 
+    group_by(lon_mid, lat_mid) %>% 
+    sample_n(1)
+  df <- df %>% 
+    dplyr::filter(id_species_site %in% df_sites_sampled$id_species_site)
+  
+  ## fit model separating mean Anet
+  Fit_LT_anom = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) + (1|id_site) + (1|species), data = df, na.action = "na.exclude")
+  
+  ## return p value for significance of term representing mean Anet
+  out_sum <- summary(Fit_LT_anom)
+  pval <- out_sum$coefficients["scale(mean_cA_tot)", "Pr(>|t|)"]
+  esti <- out_sum$coefficients["scale(mean_cA_tot)", "Estimate"]
+  
+  return(tibble(estimate = esti, pval = pval))
+}
+
+n_samples <- 300
+df_sampled_mean_anet <- purrr::map_dfr(as.list(seq(n_samples)), ~get_pval_mean_anet(., df_anl))
+
+df_sampled_mean_anet %>% 
+  ggplot(aes(estimate, ..count..)) +
+  geom_histogram()
+
+n_sign <- df_sampled_mean_anet %>% 
+  dplyr::filter(pval < 0.05) %>% 
+  nrow()
+
+## fraction not significant
+1 - n_sign/n_samples
+```
+
+## MODIS P-model data
+
+### Interannual variation (IAV)
+
+#### Start-of-Season (SOS)
+
+```{r}
+fit_iav_modis_off_vs_on = lmer(off ~ scale(on) + (1|sitename) , data = df_anl_modis, na.action = "na.exclude")
+summary(fit_iav_modis_off_vs_on)
+r.squaredGLMM(fit_iav_modis_off_vs_on)
+plot(allEffects(fit_iav_modis_off_vs_on))
+
+aic_iav_modis_off_vs_on <- AIC(fit_iav_modis_off_vs_on)
+out_iav_modis_off_vs_on <- allEffects(fit_iav_modis_off_vs_on)
+gg_iav_modis_off_vs_on <- ggplot_on(out_iav_modis_off_vs_on)
+gg_iav_modis_off_vs_on
+```
+
+#### Anet MODIS P-model (Fig 1D)
+
+```{r}
+fit_iav_modis_off_vs_gppnet = lmer(off ~ scale(gpp_net) + (1|sitename) , data = df_anl_modis, na.action = "na.exclude")
+summary(fit_iav_modis_off_vs_gppnet)
+r.squaredGLMM(fit_iav_modis_off_vs_gppnet)
+plot(allEffects(fit_iav_modis_off_vs_gppnet))
+
+aic_iav_modis_off_vs_gppnet <- AIC(fit_iav_modis_off_vs_gppnet)
+out_iav_modis_off_vs_gppnet <- allEffects(fit_iav_modis_off_vs_gppnet)
+gg_iav_modis_off_vs_gppnet <- ggplot_gpp_net(out_iav_modis_off_vs_gppnet)
+gg_iav_modis_off_vs_gppnet
+```
+
+### Long-term (year)
+
+#### SOS
+
+```{r}
+fit_lt_modis_off_vs_on_year = lmer(off ~ scale(on) + scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
+summary(fit_lt_modis_off_vs_on_year)
+r.squaredGLMM(fit_lt_modis_off_vs_on_year)
+plot(allEffects(fit_lt_modis_off_vs_on_year))
+
+aic_lt_modis_off_vs_on_year <- AIC(fit_lt_modis_off_vs_on_year)
+out_lt_modis_off_vs_on_year <- allEffects(fit_lt_modis_off_vs_on_year)
+gg_lt_modis_off_vs_on <- ggplot_on(out_lt_modis_off_vs_on_year)
+gg_lt_modis_off_vs_year1 <- ggplot_year(out_lt_modis_off_vs_on_year)
+
+gg_lt_modis_off_vs_on + gg_lt_modis_off_vs_year1
+```
+
+Long-term trend in SOS.
+
+```{r}
+fit_lt_modis_on_vs_year <- lmer(on ~ scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
+summary(fit_lt_modis_on_vs_year)
+r.squaredGLMM(fit_lt_modis_on_vs_year)
+plot(allEffects(fit_lt_modis_on_vs_year))
+
+out_lt_modis_on_vs_year <- allEffects(fit_lt_modis_on_vs_year)
+gg_lt_modis_on_vs_year <- ggplot_year(out_lt_modis_on_vs_year)
+gg_lt_modis_on_vs_year <- gg_lt_modis_on_vs_year + ylab("SOS (DOY)") 
+gg_lt_modis_on_vs_year
+```
+
+#### Anet P-model
+
+```{r}
+fit_lt_modis_off_vs_gppnet_year = lmer(off ~ scale(gpp_net) + scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
+summary(fit_lt_modis_off_vs_gppnet_year)
+r.squaredGLMM(fit_lt_modis_off_vs_gppnet_year)
+plot(allEffects(fit_lt_modis_off_vs_gppnet_year))
+
+aic_lt_modis_off_vs_gppnet_year <- AIC(fit_lt_modis_off_vs_gppnet_year)
+out_lt_modis_off_vs_gppnet_year <- allEffects(fit_lt_modis_off_vs_gppnet_year)
+gg_lt_modis_off_vs_gppnet <- ggplot_gpp_net(out_lt_modis_off_vs_gppnet_year)
+gg_lt_modis_off_vs_year2 <- ggplot_year(out_lt_modis_off_vs_gppnet_year)
+
+gg_lt_modis_off_vs_gppnet + gg_lt_modis_off_vs_year2
+
+```
+
+Is this better model than EOS ~ Anet?
+
+```{r}
+out_anova <- anova(fit_iav_modis_off_vs_gppnet, fit_lt_modis_off_vs_gppnet_year)
+out_anova
+```
+
+#### Long-term trend in Anet.(New Fig 1C red, old Fig 1D red)
+
+```{r}
+fit_lt_modis_gppnet_vs_year <- lmer(gpp_net ~ scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
+summary(fit_lt_modis_gppnet_vs_year)
+plot(allEffects(fit_lt_modis_gppnet_vs_year))
+
+out_lt_modis_gppnet_vs_year <- allEffects(fit_lt_modis_gppnet_vs_year)
+gg_lt_modis_gppnet_vs_year <- ggplot_year(out_lt_modis_gppnet_vs_year)
+gg_lt_modis_gppnet_vs_year <- gg_lt_modis_gppnet_vs_year + labs(y = expression(italic("A")[net]))
+gg_lt_modis_gppnet_vs_year
+```
+
+##### Plot dual figure
+
+```{r}
+ggplot_year_gppnet <- function(x, y){
+  
+  df1 <- tibble(upper = x$`scale(year)`$upper[,1],
+               lower = x$`scale(year)`$lower[,1],
+               off = x$`scale(year)`$fit[,1],
+               year = x$`scale(year)`$x[,1])
+  df2 <- tibble(upper = y$`scale(year)`$upper[,1],
+             lower = y$`scale(year)`$lower[,1],
+             anet = y$`scale(year)`$fit[,1],
+             year = y$`scale(year)`$x[,1])
+  
+  coef <- 0.7 * mean(df1$off) / mean(df2$anet)
+  
+  # library(grid)
+  # t1 <- textGrob(expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), x = 0, y = 1.1, gp = gpar(col = "black"))
+  
+  gg <- ggplot() + 
+    geom_ribbon(data = df1, aes(x = year, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df1, aes(x = year, y = off), col = "royalblue") +
+    
+    geom_ribbon(data = df2, aes(x = year, ymin = lower * coef + 100, ymax = upper * coef + 100), alpha = 0.2) +
+    geom_line(data = df2, aes(x = year, y = anet * coef + 100), col = "red") +
+    scale_y_continuous(name = "EOS (DOY)",
+                       sec.axis = sec_axis( ~(. - 100) / coef, name = expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")")))) +
+    labs(x = "Year", 
+         title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"), "      ", italic("A")[net], " ~ Year")), 
+         subtitle = "MODIS data and P-model") +
+    theme_classic() +
+    # annotation_custom(grobTree(t1)) +
+    theme(axis.text.y.right = element_text(colour="red"),
+          axis.ticks.y.right = element_line(colour="red"),
+          axis.title.y.right = element_text(colour="red"),
+          axis.text.y = element_text(colour="royalblue"),
+          axis.ticks.y = element_line(colour="royalblue"),
+          axis.title.y = element_text(colour="royalblue"),
+          axis.line.y = element_line(colour = "royalblue"),
+          axis.line.y.right = element_line(colour = "red"))
+  
+  return(gg)
+}
+
+gg_dual_modis_gppnet <- ggplot_year_gppnet(x = out_lt_modis_off_vs_gppnet_year, y = out_lt_modis_gppnet_vs_year)
+gg_dual_modis_gppnet
+```
+
+### IAV vs. long-term vs. mean
+
+This is based on a spatially stratified sampling.
+
+#### Anet MODIS P-model
+
+Separate mean across years 2001-2018 from interannual anomaly.
+
+```{r eval=FALSE}
+separate_anom <- function(df){
+  df_mean <- df %>% 
+    #dplyr::filter(year %in% 2001:2018) %>% 
+    summarise(mean_off = mean(off, na.rm = TRUE), 
+              mean_gpp_net = mean(gpp_net, na.rm = TRUE))
+  df %>% 
+    mutate(mean_gpp_net = df_mean$mean_gpp_net,
+           anom_gpp_net = gpp_net - df_mean$mean_gpp_net)
+}
+
+df_anl_modis <- df_anl_modis %>% 
+  group_by(sitename) %>% 
+  nest() %>% 
+  mutate(data = map(data, ~separate_anom(.))) %>% 
+  unnest(data)
+
+fit_lt_modis_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
+summary(fit_lt_modis_anom_gppnet)
+plot(allEffects(fit_lt_modis_anom_gppnet))
+r.squaredGLMM(fit_lt_modis_anom_gppnet)
+
+aic_lt_modis_anom_gppnet <- AIC(fit_lt_modis_anom_gppnet)
+out_lt_modis_anom_gppnet <- allEffects(fit_lt_modis_anom_gppnet)
+gg_lt_modis_mean_gppnet <- ggplot_mean_gpp_net(out_lt_modis_anom_gppnet)
+gg_lt_modis_anom_gppnet <- ggplot_anom_gpp_net(out_lt_modis_anom_gppnet)
+gg_lt_modis_anom_year   <- ggplot_year(out_lt_modis_anom_gppnet)
+
+gg_lt_modis_mean_gppnet + gg_lt_modis_anom_gppnet + gg_lt_modis_anom_year
+```
+
+Bootstrap 300 samples and test for significance in the mean Anet coefficient. This returns a data frame containing the coefficient estimate and the p-value for each sample.
+
+```{r eval=FALSE}
+get_pval_mean_anet <- function(use_seed, df){
+  
+  ## sample one time series per gridcell
+  set.seed(use_seed)
+  df_sites_sampled <- df %>% 
+    dplyr::select(sitename, lon, lat) %>% 
+    distinct() %>% 
+    group_by(lon, lat) %>% 
+    sample_n(1)
+  df <- df %>% 
+    dplyr::filter(sitename %in% df_sites_sampled$sitename)
+  
+  ## fit model separating mean Anet
+  Fit_LT_anom = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|sitename), data = df, na.action = "na.exclude")
+  
+  ## return p value for significance of term representing mean Anet
+  out_sum <- summary(Fit_LT_anom)
+  pval <- out_sum$coefficients["scale(mean_gpp_net)", "Pr(>|t|)"]
+  esti <- out_sum$coefficients["scale(mean_gpp_net)", "Estimate"]
+  
+  return(tibble(estimate = esti, pval = pval))
+}
+
+n_samples <- 300
+df_sampled_mean_anet <- purrr::map_dfr(as.list(seq(n_samples)), ~get_pval_mean_anet(., df_anl_modis))
+
+df_sampled_mean_anet %>% 
+  ggplot(aes(estimate, ..count..)) +
+  geom_histogram()
+
+n_sign <- df_sampled_mean_anet %>% 
+  dplyr::filter(pval < 0.05) %>% 
+  nrow()
+
+## fraction not significant
+1 - n_sign/n_samples
+```
+
+## Figure 1
+
+```{r}
+gg_iav_pep_off_vs_cAtot <- gg_iav_pep_off_vs_cAtot +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "PEP data and LPJ-GUESS")
+
+gg_lt_pep_off_vs_cAtot <- gg_lt_pep_off_vs_cAtot +
+  labs(title = expression(paste("EOS ~ ", bolditalic("A")[bold(net)], " + Year")), subtitle = "PEP data and LPJ-GUESS")
+
+gg_lt_pep_off_vs_year2 <- gg_lt_pep_off_vs_year2 +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), subtitle = "PEP data and LPJ-GUESS")
+
+gg_iav_pep_off_vs_gppnet <- gg_iav_pep_off_vs_gppnet +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "PEP data and P-model")
+
+gg_lt_pep_off_vs_gppnet <- gg_lt_pep_off_vs_gppnet +
+  labs(title = expression(paste("EOS ~ ", bolditalic("A")[bold(net)], " + Year")), subtitle = "PEP data and P-model")
+
+gg_lt_pep_off_vs_year3 <- gg_lt_pep_off_vs_year3 +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), subtitle = "PEP data and P-model")
+
+pp <- (gg_iav_pep_off_vs_cAtot + gg_lt_pep_off_vs_cAtot + gg_lt_pep_off_vs_year2)/(gg_iav_pep_off_vs_gppnet + gg_lt_pep_off_vs_gppnet + gg_lt_pep_off_vs_year3)
+pp + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/fig_1.png", width = 13, height = 8)
+
+# With dual plot
+qq <- (gg_iav_pep_off_vs_cAtot + gg_lt_pep_off_vs_cAtot + gg_dual_pep_cAtot) / (gg_iav_pep_off_vs_gppnet + gg_lt_pep_off_vs_gppnet + gg_dual_pep_gppnet)
+qq + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/fig_1b.png", width = 13, height = 8)
+
+```
+
+## Figure 2
+
+```{r}
+gg_iav_modis_off_vs_gppnet <- gg_iav_modis_off_vs_gppnet +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "MODIS data and P-model")
+
+gg_lt_modis_off_vs_gppnet <- gg_lt_modis_off_vs_gppnet +
+  labs(title = expression(paste("EOS ~ ", bolditalic("A")[bold(net)], " + Year")), subtitle = "MODIS data and P-model")
+
+gg_lt_modis_off_vs_year2 <- gg_lt_modis_off_vs_year2 +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), subtitle = "MODIS data and P-model")
+
+# Anomalies!
+gg_lt_modis_mean_gppnet <- gg_lt_modis_mean_gppnet +
+  labs(title = expression(paste("EOS ~ ", bold("Mean "), bolditalic("A")[bold(net)], " + Anomalies ", italic("A")[net], " + Year")), subtitle = "MODIS data and P-model")
+  
+gg_lt_modis_anom_gppnet <- gg_lt_modis_anom_gppnet +
+  labs(title = expression(paste("EOS ~ Mean ", italic("A")[net], " + " ,bold("Anomalies "), bolditalic("A")[bold(net)], " + Year")), subtitle = "MODIS data and P-model") 
+  
+gg_lt_modis_anom_year <- gg_lt_modis_anom_year +
+  labs(title = expression(paste("EOS ~ Mean ", italic("A")[net], " + Anomalies ", italic("A")[net],bold("Year"))), subtitle = "MODIS data and P-model") 
+
+# Plot together
+pp <- (gg_iav_modis_off_vs_gppnet + gg_lt_modis_off_vs_gppnet + gg_lt_modis_off_vs_year2) / (gg_lt_modis_mean_gppnet + gg_lt_modis_anom_gppnet + gg_lt_modis_anom_year)
+pp + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/fig_2.png", width = 13, height = 8)
+
+# With dual plot
+qq <- (gg_iav_modis_off_vs_gppnet + gg_lt_modis_off_vs_gppnet + gg_dual_modis_gppnet) / (gg_lt_modis_mean_gppnet + gg_lt_modis_anom_gppnet + gg_lt_modis_anom_year)
+qq + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/fig_2b.png", width = 13, height = 8)
+
+```
+
+## Supplementary Fig. 1
+
+```{r}
+gg_iav_pep_off_vs_on <- gg_iav_pep_off_vs_on +
+  labs(title = "EOS ~ SOS", subtitle = "PEP data")
+
+gg_lt_pep_on_vs_year <- gg_lt_pep_on_vs_year +
+  labs(title = "SOS ~ Year", subtitle = "PEP data")
+
+gg_lt_pep_cAtot_vs_year <- gg_lt_pep_cAtot_vs_year +
+  labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "PEP data and LPG-GUESS")
+
+gg_lt_pep_gppnet_vs_year <- gg_lt_pep_gppnet_vs_year +
+  labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "PEP data and P-model")
+
+ss1 <- (gg_iav_pep_off_vs_on + gg_lt_pep_on_vs_year) / (gg_lt_pep_cAtot_vs_year + gg_lt_pep_gppnet_vs_year)
+ss1 + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/Sup_fig_1.png", width = 8, height = 6)
+```
+
+## Supplementary Fig. 2
+
+```{r}
+gg_iav_modis_off_vs_on <- gg_iav_modis_off_vs_on +
+  labs(title = "EOS ~ SOS", subtitle = "MODIS data")
+
+gg_lt_modis_on_vs_year <- gg_lt_modis_on_vs_year +
+  labs(title = "SOS ~ Year", subtitle = "MODIS data")
+
+gg_lt_modis_gppnet_vs_year <- gg_lt_modis_gppnet_vs_year +
+  labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "MODIS data and P-model")
+
+ss2 <- gg_iav_modis_off_vs_on + gg_lt_modis_on_vs_year + gg_lt_modis_gppnet_vs_year
+ss2 + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/Sup_fig_2.png", width = 9, height = 3)
+```
+
+
