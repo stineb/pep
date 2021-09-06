@@ -287,8 +287,9 @@ format_drivers <- function(
   
   if (run_model){
     message("Running model on formatted data ....")
-    output <- process_pmodel_modis(
-      file = output
+    output <- process_pmodel(
+      file = output,
+      agg = FALSE
     )
   }
   
