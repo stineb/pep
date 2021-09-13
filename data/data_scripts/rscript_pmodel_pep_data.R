@@ -35,7 +35,7 @@ df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") 
   )
 
 # read etopo data
-if(!grepl('eu-', Sys.info()['nodename'])){
+if(grepl('eu-', Sys.info()['nodename'])){
   r <- raster::raster("~/data/etopo/ETOPO1_Bed_g_geotiff.tif")
 }
 
