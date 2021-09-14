@@ -2,7 +2,7 @@
 args <- commandArgs(trailingOnly=TRUE)
 
 # set output path
-path <- "~/data/modis_pmodel_output"
+path <- "~/data/pep_pmodel_output/modis/"
 
 # load libraries and
 # scripts
