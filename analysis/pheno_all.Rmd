@@ -169,16 +169,17 @@ Data from PEP pheno and LPJ-GUESS photosynthesis
 
 Read the data complemented with drivers, obtained from Constantin Zohner (7.12.2020).
 ```{r}
-df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
+df_zz <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
   as_tibble() %>% 
   rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
          anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
          species = Species, id_site = PEP_ID, id_species_site = timeseries)
+df_zz <- df_zz %>% rename(sitename=id_species_site)
 ```
 
 Taking uncorrected Zani
 ```{r}
-df_anl <- df
+df_anl <- df_zz
 ```
 
 Correct Zani EOS dates with original PEP725.
@@ -213,6 +214,24 @@ out$gg
 
 Data from PEP pheno and P-model photosynthesis
 Add P-model outputs to the databaset
+
+```{r}
+
+# Read p-model outputs
+pep725_pmodel <- readRDS("~/pep/data/pmodel_output/pep725_pmodel_output.rds")
+pep725_pmodel <- pep725_pmodel %>% mutate(gpp_net = gpp - rd, lue = gpp / apar)
+
+# Join datasets
+# PEP data provided by ZZ
+df_anl_pmodel <- df_zz %>% 
+  left_join(pep725_pmodel)
+# Original data filtered
+df_orig_wide <- df_orig_wide %>% unite(sitename, c(id_site, species), sep = "_", remove = FALSE)
+df_anl_pmodel <- df_orig_wide %>% 
+  inner_join(pep725_pmodel)
+
+```
+
 
 ```{r}
 load("~/data/pep/processed/df_pmodel_zani.RData")
