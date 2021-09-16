@@ -18,7 +18,7 @@ source("R/process_pmodel.R")
 
 # read sites data frame, in this case
 # the list of all MODIS
-df <- readRDS("data/sampled_pixels.rds") %>%
+df <- readRDS("data/modis_phenology/sampled_pixels.rds") %>%
   mutate(
     year_start = 2001,
     year_end = 2014,
