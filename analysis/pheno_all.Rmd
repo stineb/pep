@@ -5,19 +5,33 @@ date: "8/17/2021"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+## Load packages
+```{r setup}
 library(tidyverse)
 library(lubridate)
 library(broom)
-library(rbeni)
+library(devtools)
+#devtools::install_github("stineb/rbeni")
+devtools::load_all("~/rbeni/")
+#library(rbeni)
 library(lme4) #lmer
 library(MuMIn) #r.squaredGLMM
 library(lmerTest) #p-values
 library(effects) #plot effects
 library(sjPlot) #plot effects
 library(patchwork)
+library(maps)
+library(viridis)
+library(rgdal)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(ggspatial)
+```
 
+## Load functions
+
+```{r, include=FALSE}
 ## functions to convert lmer effects plots to ggplot objects
 ggplot_on <- function(x){
   df <- tibble(upper = x$`scale(on)`$upper[,1],
@@ -158,7 +172,6 @@ ggplot_anom_gpp_net <- function(x){
   
   return(gg)
 }
-
 ```
 
 ## Load data
@@ -174,7 +187,6 @@ df_zz <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv
   rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
          anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
          species = Species, id_site = PEP_ID, id_species_site = timeseries)
-df_zz <- df_zz %>% rename(sitename=id_species_site)
 ```
 
 Taking uncorrected Zani
@@ -216,24 +228,6 @@ Data from PEP pheno and P-model photosynthesis
 Add P-model outputs to the databaset
 
 ```{r}
-
-# Read p-model outputs
-pep725_pmodel <- readRDS("~/pep/data/pmodel_output/pep725_pmodel_output.rds")
-pep725_pmodel <- pep725_pmodel %>% mutate(gpp_net = gpp - rd, lue = gpp / apar)
-
-# Join datasets
-# PEP data provided by ZZ
-df_anl_pmodel <- df_zz %>% 
-  left_join(pep725_pmodel)
-# Original data filtered
-df_orig_wide <- df_orig_wide %>% unite(sitename, c(id_site, species), sep = "_", remove = FALSE)
-df_anl_pmodel <- df_orig_wide %>% 
-  inner_join(pep725_pmodel)
-
-```
-
-
-```{r}
 load("~/data/pep/processed/df_pmodel_zani.RData")
 
 df_anl <- df_pmodel_zani %>% 
@@ -250,19 +244,44 @@ out <- df_anl %>%
 out$gg
 ```
 
+New simulations with daylight < 12h instead of 11h. or considering the cutoff in 21-Jun
+```{r}
+# Read p-model outputs
+#pep725_pmodel <- readRDS("~/pep/data/pmodel_output/pep725_pmodel_output.rds")
+pep725_pmodel <- readRDS("~/pep/data/pmodel_output/pep725_pmodel_output_21Jun.rds")
+pep725_pmodel <- pep725_pmodel %>% 
+  mutate(gpp_net = gpp - rd, 
+         lue = gpp / apar)
+# Join datasets
+# PEP data provided by ZZ
+df_zz <- df_zz %>% rename(sitename=id_species_site)
+df_anl_pmodel_zz <- pep725_pmodel %>% 
+  right_join(df_zz)
+# Original data filtered
+df_orig_wide <- df_orig_wide %>% unite(sitename, c(id_site, species), sep = "_", remove = FALSE)
+# Join
+df_anl_pmodel_orig <- pep725_pmodel %>% 
+  left_join(df_orig_wide)
+
+```
+
 ### MODIS P-model outputs
 
 Data from MODIS pheno and P-model photosynthesis
-
+New simulations with daylight < 12h instead of 11h. or considering the cutoff in 21-Jun
 ```{r}
 # Read phenology dates from MODIS
 modis_pheno_sites <- readRDS("~/pep/data/modis_phenology/modis_pheno_sites.rds")
 # Read p-model outputs
-modis_pmodel <- readRDS("~/pep/data/pmodel_output/modis_pmodel_output.rds")
-modis_pmodel <- modis_pmodel %>% mutate(gpp_net = gpp - rd, lue = gpp / apar)
+#modis_pmodel <- readRDS("~/pep/data/pmodel_output/modis_pmodel_output.rds")
+modis_pmodel <- readRDS("~/pep/data/pmodel_output/modis_pmodel_output_21Jun.rds")
+#modis_pmodel_old <- readRDS("~/pep/data/pmodel_output/modis_pmodel_output_old.rds")
+modis_pmodel <- modis_pmodel %>% 
+  mutate(gpp_net = gpp - rd, 
+         lue = gpp / apar)
 # Join datasets
 df_anl_modis <- modis_pheno_sites %>% 
-  left_join(modis_pmodel[,2:10], by = c("lon","lat","year"))
+  right_join(modis_pmodel[,2:10], by = c("lon","lat","year"))
 # Change variable names
 df_anl_modis <- df_anl_modis %>% rename(on = SOS_2_doy, off = EOS_2_doy) # Select the pheno band
 df_anl_modis <- df_anl_modis %>% filter(off>on)
@@ -289,7 +308,7 @@ df_ndata %>%
 
 ### Interannual variation (IAV)
 
-#### Start-of-Season (SOS)
+#### Start-of-Season (SOS) - Appendix S1A
 
 ```{r}
 fit_iav_pep_off_vs_on = lmer(off ~ scale(on) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
@@ -303,7 +322,7 @@ gg_iav_pep_off_vs_on <- ggplot_on(out_iav_pep_off_vs_on)
 gg_iav_pep_off_vs_on
 ```
 
-#### Anet LPJ (Fig 1A)
+#### Anet LPJ - Fig 1A
 
 ```{r}
 fit_iav_pep_off_vs_cAtot = lmer(off ~ scale(cA_tot) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
@@ -319,7 +338,7 @@ gg_iav_pep_off_vs_cAtot
 
 ### Long-term (year)
 
-#### SOS
+#### EOS
 
 ```{r}
 fit_lt_pep_off_vs_on_year = lmer(off ~ scale(on) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
@@ -335,7 +354,7 @@ gg_lt_pep_off_vs_year1 <- ggplot_year(out_lt_pep_off_vs_on_year)
 gg_lt_pep_off_vs_on + gg_lt_pep_off_vs_year1
 ```
 
-Long-term trend in SOS.
+#### SOS - Appendix S1B
 
 ```{r}
 fit_lt_pep_on_vs_year <- lmer(on ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
@@ -347,7 +366,7 @@ gg_lt_pep_on_vs_year <- gg_lt_pep_on_vs_year + ylab("SOS (DOY)")
 gg_lt_pep_on_vs_year
 ```
 
-#### Anet LPJ (New Fig 1B and 1C, old Fig 1C and 1D)
+#### Anet LPJ - Fig 1B and 1C 
 
 ```{r}
 fit_lt_pep_off_vs_cAtot_year = lmer(off ~ scale(cA_tot) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
@@ -366,11 +385,11 @@ gg_lt_pep_off_vs_cAtot + gg_lt_pep_off_vs_year2
 Is this better model than EOS ~ Anet?
 
 ```{r}
-out_anova <- anova(fit_iav_pep_cAtot, fit_lt_pep_cAtot)
+out_anova <- anova(fit_iav_pep_off_vs_cAtot, fit_lt_pep_off_vs_cAtot_year)
 out_anova
 ```
 
-#### Long-term trend in Anet.(New Fig 1C red, old Fig 1D red)
+#### Long-term trend in Anet - Appendix S1C
 
 ```{r}
 fit_lt_pep_cAtot_vs_year <- lmer(cA_tot ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
@@ -471,55 +490,14 @@ gg_lt_pep_mean_cAtot + gg_lt_pep_anom_cAtot + gg_lt_pep_anom_year
 
 ```
 
-Bootstrap 300 samples and test for significance in the mean Anet coefficient. This returns a data frame containing the coefficient estimate and the p-value for each sample.
-
-```{r eval=FALSE}
-get_pval_mean_anet <- function(use_seed, df){
-  
-  ## sample one time series per gridcell
-  set.seed(use_seed)
-  df_sites_sampled <- df %>% 
-    dplyr::select(id_species_site, lon_mid, lat_mid) %>% 
-    distinct() %>% 
-    group_by(lon_mid, lat_mid) %>% 
-    sample_n(1)
-  df <- df %>% 
-    dplyr::filter(id_species_site %in% df_sites_sampled$id_species_site)
-  
-  ## fit model separating mean Anet
-  Fit_LT_anom = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) + (1|id_site) + (1|species), data = df, na.action = "na.exclude")
-  
-  ## return p value for significance of term representing mean Anet
-  out_sum <- summary(Fit_LT_anom)
-  pval <- out_sum$coefficients["scale(mean_cA_tot)", "Pr(>|t|)"]
-  esti <- out_sum$coefficients["scale(mean_cA_tot)", "Estimate"]
-  
-  return(tibble(estimate = esti, pval = pval))
-}
-
-n_samples <- 300
-df_sampled_mean_anet <- purrr::map_dfr(as.list(seq(n_samples)), ~get_pval_mean_anet(., df_anl))
-
-df_sampled_mean_anet %>% 
-  ggplot(aes(estimate, ..count..)) +
-  geom_histogram()
-
-n_sign <- df_sampled_mean_anet %>% 
-  dplyr::filter(pval < 0.05) %>% 
-  nrow()
-
-## fraction not significant
-1 - n_sign/n_samples
-```
-
 ## P-model data
 
 ### Interannual variation (IAV)
 
-#### Anet P-model (Fig 1D)
+#### Anet P-model - Fig 1D
 
 ```{r}
-fit_iav_pep_off_vs_gppnet = lmer(off ~ scale(gpp_net) + (1|id_site) + (1|species) , data = df_anl, na.action = "na.exclude")
+fit_iav_pep_off_vs_gppnet = lmer(off ~ scale(gpp_net) + (1|id_site) + (1|species) , data = df_anl_pmodel_zz, na.action = "na.exclude")
 summary(fit_iav_pep_off_vs_gppnet)
 r.squaredGLMM(fit_iav_pep_off_vs_gppnet)
 plot(allEffects(fit_iav_pep_off_vs_gppnet))
@@ -532,10 +510,10 @@ gg_iav_pep_off_vs_gppnet
 
 ### Long-term (year)
 
-#### Anet P-model (New Fig 1E and 1F)
+#### Anet P-model - Fig 1E and 1F
 
 ```{r}
-fit_lt_pep_off_vs_gppnet_year = lmer(off ~ scale(gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+fit_lt_pep_off_vs_gppnet_year = lmer(off ~ scale(gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl_pmodel_zz, na.action = "na.exclude")
 summary(fit_lt_pep_off_vs_gppnet_year)
 r.squaredGLMM(fit_lt_pep_off_vs_gppnet_year)
 plot(allEffects(fit_lt_pep_off_vs_gppnet_year))
@@ -555,10 +533,10 @@ out_anova <- anova(fit_iav_pm_gppnet, fit_lt_pm_gppnet)
 out_anova
 ```
 
-#### Long-term trend in Anet.(New Fig 1F red)
+#### Long-term trend in Anet - Appendix S1D
 
 ```{r}
-fit_lt_pep_gppnet_vs_year <- lmer(gpp_net ~ scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+fit_lt_pep_gppnet_vs_year <- lmer(gpp_net ~ scale(year) + (1|id_site) + (1|species), data = df_anl_pmodel_zz, na.action = "na.exclude")
 summary(fit_lt_pep_gppnet_vs_year)
 plot(allEffects(fit_lt_pep_gppnet_vs_year))
 
@@ -635,13 +613,13 @@ separate_anom <- function(df){
            anom_gpp_net = gpp_net - df_mean$mean_gpp_net)
 }
 
-df_anl <- df_anl %>% 
-  group_by(id_species_site) %>% 
+df_anl_pmodel_zz <- df_anl_pmodel_zz %>% 
+  group_by(sitename) %>% 
   nest() %>% 
   mutate(data = map(data, ~separate_anom(.))) %>% 
   unnest(data)
 
-fit_lt_pep_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
+fit_lt_pep_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl_pmodel_zz, na.action = "na.exclude")
 summary(fit_lt_pep_anom_gppnet)
 plot(allEffects(fit_lt_pep_anom_gppnet))
 r.squaredGLMM(fit_lt_pep_anom_gppnet)
@@ -655,52 +633,11 @@ gg_lt_pep_anom_year   <- ggplot_year(out_lt_pep_anom_gppnet)
 gg_lt_pep_mean_gppnet + gg_lt_pep_anom_gppnet + gg_lt_pep_anom_year
 ```
 
-Bootstrap 300 samples and test for significance in the mean Anet coefficient. This returns a data frame containing the coefficient estimate and the p-value for each sample.
-
-```{r eval=FALSE}
-get_pval_mean_anet <- function(use_seed, df){
-  
-  ## sample one time series per gridcell
-  set.seed(use_seed)
-  df_sites_sampled <- df %>% 
-    dplyr::select(id_species_site, lon_mid, lat_mid) %>% 
-    distinct() %>% 
-    group_by(lon_mid, lat_mid) %>% 
-    sample_n(1)
-  df <- df %>% 
-    dplyr::filter(id_species_site %in% df_sites_sampled$id_species_site)
-  
-  ## fit model separating mean Anet
-  Fit_LT_anom = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) + (1|id_site) + (1|species), data = df, na.action = "na.exclude")
-  
-  ## return p value for significance of term representing mean Anet
-  out_sum <- summary(Fit_LT_anom)
-  pval <- out_sum$coefficients["scale(mean_cA_tot)", "Pr(>|t|)"]
-  esti <- out_sum$coefficients["scale(mean_cA_tot)", "Estimate"]
-  
-  return(tibble(estimate = esti, pval = pval))
-}
-
-n_samples <- 300
-df_sampled_mean_anet <- purrr::map_dfr(as.list(seq(n_samples)), ~get_pval_mean_anet(., df_anl))
-
-df_sampled_mean_anet %>% 
-  ggplot(aes(estimate, ..count..)) +
-  geom_histogram()
-
-n_sign <- df_sampled_mean_anet %>% 
-  dplyr::filter(pval < 0.05) %>% 
-  nrow()
-
-## fraction not significant
-1 - n_sign/n_samples
-```
-
 ## MODIS P-model data
 
 ### Interannual variation (IAV)
 
-#### Start-of-Season (SOS)
+#### Start-of-Season (SOS) - Appendix S2A
 
 ```{r}
 fit_iav_modis_off_vs_on = lmer(off ~ scale(on) + (1|sitename) , data = df_anl_modis, na.action = "na.exclude")
@@ -714,7 +651,7 @@ gg_iav_modis_off_vs_on <- ggplot_on(out_iav_modis_off_vs_on)
 gg_iav_modis_off_vs_on
 ```
 
-#### Anet MODIS P-model (Fig 1D)
+#### Anet MODIS P-model
 
 ```{r}
 fit_iav_modis_off_vs_gppnet = lmer(off ~ scale(gpp_net) + (1|sitename) , data = df_anl_modis, na.action = "na.exclude")
@@ -730,7 +667,7 @@ gg_iav_modis_off_vs_gppnet
 
 ### Long-term (year)
 
-#### SOS
+#### EOS
 
 ```{r}
 fit_lt_modis_off_vs_on_year = lmer(off ~ scale(on) + scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
@@ -746,7 +683,7 @@ gg_lt_modis_off_vs_year1 <- ggplot_year(out_lt_modis_off_vs_on_year)
 gg_lt_modis_off_vs_on + gg_lt_modis_off_vs_year1
 ```
 
-Long-term trend in SOS.
+#### EOS - Appendix S2B
 
 ```{r}
 fit_lt_modis_on_vs_year <- lmer(on ~ scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
@@ -784,7 +721,7 @@ out_anova <- anova(fit_iav_modis_off_vs_gppnet, fit_lt_modis_off_vs_gppnet_year)
 out_anova
 ```
 
-#### Long-term trend in Anet.(New Fig 1C red, old Fig 1D red)
+#### Long-term trend in Anet -  Appendix S2C
 
 ```{r}
 fit_lt_modis_gppnet_vs_year <- lmer(gpp_net ~ scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
@@ -849,7 +786,7 @@ gg_dual_modis_gppnet
 
 This is based on a spatially stratified sampling.
 
-#### Anet MODIS P-model
+#### Anet MODIS P-model - Figure 2A and 2B
 
 Separate mean across years 2001-2018 from interannual anomaly.
 
@@ -882,6 +819,19 @@ gg_lt_modis_anom_gppnet <- ggplot_anom_gpp_net(out_lt_modis_anom_gppnet)
 gg_lt_modis_anom_year   <- ggplot_year(out_lt_modis_anom_gppnet)
 
 gg_lt_modis_mean_gppnet + gg_lt_modis_anom_gppnet + gg_lt_modis_anom_year
+
+fit_modis_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + (1|sitename) + (1|year), data = df_anl_modis, na.action = "na.exclude")
+summary(fit_modis_anom_gppnet)
+plot(allEffects(fit_modis_anom_gppnet))
+r.squaredGLMM(fit_modis_anom_gppnet)
+
+aic_modis_anom_gppnet <- AIC(fit_modis_anom_gppnet)
+out_modis_anom_gppnet <- allEffects(fit_modis_anom_gppnet)
+gg_modis_mean_gppnet <- ggplot_mean_gpp_net(out_modis_anom_gppnet)
+gg_modis_anom_gppnet <- ggplot_anom_gpp_net(out_modis_anom_gppnet)
+
+gg_modis_mean_gppnet + gg_modis_anom_gppnet
+
 ```
 
 Bootstrap 300 samples and test for significance in the mean Anet coefficient. This returns a data frame containing the coefficient estimate and the p-value for each sample.
@@ -900,10 +850,9 @@ get_pval_mean_anet <- function(use_seed, df){
     dplyr::filter(sitename %in% df_sites_sampled$sitename)
   
   ## fit model separating mean Anet
-  Fit_LT_anom = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|sitename), data = df, na.action = "na.exclude")
-  
+fit_modis_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + (1|sitename) + (1|year), data = df_anl_modis, na.action = "na.exclude")  
   ## return p value for significance of term representing mean Anet
-  out_sum <- summary(Fit_LT_anom)
+  out_sum <- summary(fit_modis_anom_gppnet)
   pval <- out_sum$coefficients["scale(mean_gpp_net)", "Pr(>|t|)"]
   esti <- out_sum$coefficients["scale(mean_gpp_net)", "Estimate"]
   
@@ -960,6 +909,14 @@ ggsave("~/pep/manuscript/fig_1b.png", width = 13, height = 8)
 ## Figure 2
 
 ```{r}
+# Anomalies Year as random
+gg_modis_mean_gppnet <- gg_modis_mean_gppnet +
+  labs(title = expression(paste("EOS ~ ", bold("Mean "), bolditalic("A")[bold(net)], " + Anomalies ", italic("A")[net])), subtitle = "MODIS data and P-model")
+  
+gg_modis_anom_gppnet <- gg_modis_anom_gppnet +
+  labs(title = expression(paste("EOS ~ Mean ", italic("A")[net], " + " ,bold("Anomalies "), bolditalic("A")[bold(net)])), subtitle = "MODIS data and P-model")
+
+# Other plots
 gg_iav_modis_off_vs_gppnet <- gg_iav_modis_off_vs_gppnet +
   labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "MODIS data and P-model")
 
@@ -969,7 +926,7 @@ gg_lt_modis_off_vs_gppnet <- gg_lt_modis_off_vs_gppnet +
 gg_lt_modis_off_vs_year2 <- gg_lt_modis_off_vs_year2 +
   labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), subtitle = "MODIS data and P-model")
 
-# Anomalies!
+# Anomalies with Year as a fixed factor
 gg_lt_modis_mean_gppnet <- gg_lt_modis_mean_gppnet +
   labs(title = expression(paste("EOS ~ ", bold("Mean "), bolditalic("A")[bold(net)], " + Anomalies ", italic("A")[net], " + Year")), subtitle = "MODIS data and P-model")
   
@@ -979,15 +936,101 @@ gg_lt_modis_anom_gppnet <- gg_lt_modis_anom_gppnet +
 gg_lt_modis_anom_year <- gg_lt_modis_anom_year +
   labs(title = expression(paste("EOS ~ Mean ", italic("A")[net], " + Anomalies ", italic("A")[net],bold("Year"))), subtitle = "MODIS data and P-model") 
 
-# Plot together
-pp <- (gg_iav_modis_off_vs_gppnet + gg_lt_modis_off_vs_gppnet + gg_lt_modis_off_vs_year2) / (gg_lt_modis_mean_gppnet + gg_lt_modis_anom_gppnet + gg_lt_modis_anom_year)
-pp + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_2.png", width = 13, height = 8)
+```
 
-# With dual plot
-qq <- (gg_iav_modis_off_vs_gppnet + gg_lt_modis_off_vs_gppnet + gg_dual_modis_gppnet) / (gg_lt_modis_mean_gppnet + gg_lt_modis_anom_gppnet + gg_lt_modis_anom_year)
-qq + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_2b.png", width = 13, height = 8)
+### Maps
+
+```{r}
+lon_breaks <- seq(from = floor(min(df_anl_modis$lon)), to = ceiling(max(df_anl_modis$lon)), by = 0.1)
+lat_breaks <- seq(from = floor(min(df_anl_modis$lat)), to = ceiling(max(df_anl_modis$lat)), by = 0.1)
+
+df_anl_modis <- df_anl_modis %>%
+  ungroup() %>%
+  mutate(ilon = cut(lon,
+                    breaks = lon_breaks),
+         ilat = cut(lat,
+                    breaks = lat_breaks)) %>%
+  mutate(lon_lower = as.numeric( sub("\\((.+),.*", "\\1", ilon)),
+         lon_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilon) ),
+         lat_lower = as.numeric( sub("\\((.+),.*", "\\1", ilat) ),
+         lat_upper = as.numeric( sub("[^,]*,([^]]*)\\]", "\\1", ilat) )) %>%
+  mutate(lon_mid = (lon_lower + lon_upper)/2,
+         lat_mid = (lat_lower + lat_upper)/2) %>%
+  
+  ## create cell name to associate with climate input
+  dplyr::select(-ilon, -ilat, -lon_lower, -lon_upper, -lat_lower, -lat_upper)
+
+df_anl_modis_agg <- df_anl_modis %>% 
+  group_by(lon_mid, lat_mid) %>% 
+  summarise(mean_gpp = mean(gpp_net, na.rm = TRUE),mean_eos = mean(off)) %>% 
+  rename(lon = lon_mid, lat = lat_mid)
+
+devtools::load_all("/Users/lmarques/rbeni/")
+plot_map4(df_anl_modis_agg, 
+                varnam = "mean_gpp", 
+                breaks = c(seq(0, 1, by = 0.2), 1.5, 2, 3, 5, 7, 10, 15, 20, 25, Inf), 
+                latmin = -60, latmax = 80,
+                spacing = "constant", 
+                combine = FALSE, 
+                colorscale = viridis::magma, 
+                legend_title = "(m)",
+                hillshade = FALSE,
+                rivers = FALSE,
+                expand_size_y = 0.5,
+                legend_direction = "vertical")
+
+plot_map3(df_anl_modis_agg, 
+                varnam = "mean_gpp", 
+                latmin = 15, latmax = 75,
+                spacing = "constant", 
+                #combine = FALSE, 
+                colorscale = viridis::magma, 
+                legend_title = expression(paste(italic("A")[net])),
+                expand_size_y = 0.5)
+
+# Generate map and zoom
+world <- ne_countries(scale = "medium", returnclass = "sf")
+class(world)
+ggplot(data = world) +
+  geom_sf() +
+  annotation_scale(location = "bl") + 
+  coord_sf(xlim = c(-180, 180), ylim = c(15, 75))
+
+map_gpp <- ggplot(data = world) + 
+  geom_sf(fill= "grey") + #antiquewhite
+  annotation_scale(location = "bl", width_hint = 0.1) + 
+  annotation_north_arrow(location = "br", which_north = "true", 
+                         height = unit(1, "cm"),
+                         width  = unit(1, "cm"),
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"), 
+                         style = north_arrow_fancy_orienteering) + 
+  coord_sf(xlim = c(-180, 180), ylim = c(15, 75)) +
+  geom_point(data = df_anl_modis_agg, aes(x = lon, y = lat, color = mean_gpp),size=.2) +
+  labs(color=expression(paste(italic("A")[net]))) +
+  scale_color_viridis(option="magma") +
+  theme(legend.position="right", #panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), 
+        panel.background = element_rect(fill = "aliceblue"),axis.title=element_blank(),plot.title = element_text(size = 10))
+
+map_eos <- ggplot(data = world) + 
+  geom_sf(fill= "grey") + #antiquewhite
+  annotation_scale(location = "bl", width_hint = 0.1) + 
+  annotation_north_arrow(location = "br", which_north = "true", 
+                         height = unit(1, "cm"),
+                         width  = unit(1, "cm"),
+                         pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"), 
+                         style = north_arrow_fancy_orienteering) + 
+  coord_sf(xlim = c(-180, 180), ylim = c(15, 75)) +
+  geom_point(data = df_anl_modis_agg, aes(x = lon, y = lat, color = mean_eos),size=.2) +
+  labs(color="EOS") +
+  scale_color_viridis(option="viridis") +
+  theme(legend.position="right", #panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), 
+        panel.background = element_rect(fill = "aliceblue"),axis.title=element_blank(),plot.title = element_text(size = 10)) 
+ 
+# Plot together
+pp <- gg_modis_mean_gppnet + gg_modis_anom_gppnet
+qq <- map_eos / map_gpp
+ggarrange(pp,qq,ncol = 1, nrow = 2,align = "h",widths = c(0.1,3), heights = c(1,1.3))
+ggsave("~/pep/manuscript/fig_2.png", width = 10, height = 10)
 
 ```
 
