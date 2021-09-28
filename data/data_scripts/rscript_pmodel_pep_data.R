@@ -30,8 +30,8 @@ df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") 
   ) %>%
   unique() %>%
   mutate(
-    year_start = 1979,
-    year_end = 2014
+    year_start = 1948,
+    year_end = 2018
   )
 
 # read etopo data
