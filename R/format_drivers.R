@@ -285,6 +285,7 @@ format_drivers <- function(
     df_soiltexture = df_soiltexture
   )
   
+  #----- Run model if desired ----
   if (run_model){
     message("Running model on formatted data ....")
     output <- process_pmodel(
