@@ -1,9 +1,3 @@
-#!/usr/bin/env Rscript
-args <- commandArgs(trailingOnly=TRUE)
-
-# set output path
-path <- "~/data/pep_pmodel_output"
-
 # load libraries and
 # scripts
 library(tidyverse)
@@ -60,7 +54,7 @@ df_pmodel <- format_drivers(
     df_sites_sub,
     bias_correction = TRUE,
     verbose = TRUE,
-    run_model = args[3]
+    run_model = FALSE
     )
 
 print(head(df_model))
