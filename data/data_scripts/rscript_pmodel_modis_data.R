@@ -14,14 +14,13 @@ library(raster)
 library(sf)
 
 source("R/format_drivers.R")
-source("R/process_pmodel.R")
 
 # read sites data frame, in this case
 # the list of all MODIS
 df <- readRDS("data/modis_phenology/sampled_pixels.rds") %>%
   mutate(
     year_start = 2001,
-    year_end = 2014,
+    year_end = 2018,
     sitename = paste("pixel", lat, lon, sep = "_")
   ) %>% ungroup()
 
