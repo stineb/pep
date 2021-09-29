@@ -2,7 +2,7 @@
 args <- commandArgs(trailingOnly=TRUE)
 
 # set output path
-path <- "~/data/pep_pmodel_output"
+path <- "~/data/pep_pmodel_output/pep725/"
 
 # load libraries and
 # scripts
@@ -17,8 +17,7 @@ library(data.table)
 source("R/format_drivers.R")
 source("R/process_pmodel.R")
 
-# read sites data frame, in this case
-# the list of all MODIS
+# read sites data frame
 df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") %>% 
   as_tibble() %>% 
   rename(

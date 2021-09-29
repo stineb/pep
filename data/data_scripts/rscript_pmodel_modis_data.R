@@ -16,7 +16,7 @@ library(sf)
 source("R/format_drivers.R")
 
 # read sites data frame, in this case
-# the list of all MODIS
+# the list of all MODIS data
 df <- readRDS("data/modis_phenology/sampled_pixels.rds") %>%
   mutate(
     year_start = 2001,

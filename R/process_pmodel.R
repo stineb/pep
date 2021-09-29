@@ -7,7 +7,7 @@
 
 process_pmodel <- function(
   file,
-  agg = TRUE
+  agg = FALSE
   ){
   
   # if input file is a dataframe assume

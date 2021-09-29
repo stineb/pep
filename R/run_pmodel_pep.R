@@ -23,8 +23,6 @@ run_pmodel_pep <- function(
   df_soiltexture,
   agg = TRUE){
   
-  # print(df_pheno[1,])
-  
   ## read from file containing full tseries model output of this site
   filnam <- paste0("data/df_pmodel_", df_siteinfo$sitename[1], ".csv")
   
@@ -135,7 +133,10 @@ run_pmodel_pep <- function(
     ## take sum/mean  
     df_out <- df_out %>% 
       group_by(year) %>% 
-      summarise(gpp = sum(gpp), rd = sum(rd), apar = sum(apar), alpha = mean(alpha, na.rm = TRUE))
+      summarise(gpp = sum(gpp),
+                rd = sum(rd),
+                apar = sum(apar),
+                alpha = mean(alpha, na.rm = TRUE))
   }
   
   return(df_out)
