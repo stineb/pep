@@ -12,7 +12,7 @@ library(lubridate)
 library(broom)
 library(devtools)
 #devtools::install_github("stineb/rbeni")
-devtools::load_all("~/rbeni/")
+#devtools::load_all("~/rbeni/")
 #library(rbeni)
 library(lme4) #lmer
 library(MuMIn) #r.squaredGLMM
@@ -33,8 +33,7 @@ library(cowplot)
 
 ## Load functions
 
-```{r, include=FALSE}
-## functions to convert lmer effects plots to ggplot objects
+```{r}
 ggplot_on <- function(x){
   df <- tibble(upper = x$`scale(on)`$upper[,1],
                lower = x$`scale(on)`$lower[,1],
@@ -249,22 +248,20 @@ out$gg
 New simulations with daylight < 12h instead of 11h. or considering the cutoff in 21-Jun
 ```{r}
 # Read p-model outputs
-#pep725_pmodel <- readRDS("~/pep/data/pmodel_output/pep725_pmodel_output.rds")
-pep725_pmodel <- readRDS("~/pep/data/pmodel_output/pep725_pmodel_output_21Jun.rds")
+pep725_pmodel <- readRDS("~/pep/data/pmodel_output/pep725_pmodel_output_21J.rds")
 pep725_pmodel <- pep725_pmodel %>% 
   mutate(gpp_net = gpp - rd, 
          lue = gpp / apar)
 # Join datasets
 # PEP data provided by ZZ
 df_zz <- df_zz %>% rename(sitename=id_species_site)
-df_anl_pmodel_zz <- pep725_pmodel %>% 
-  inner_join(df_zz)
+df_anl_pmodel_zz <- df_zz %>% 
+  left_join(pep725_pmodel)
 # Original data filtered
 df_orig_wide <- df_orig_wide %>% unite(sitename, c(id_site, species), sep = "_", remove = FALSE)
 # Join
-df_anl_pmodel_orig <- pep725_pmodel %>% 
-  inner_join(df_orig_wide)
-
+df_anl_pmodel_orig <- df_orig_wide %>% 
+  left_join(pep725_pmodel)
 ```
 
 ### MODIS P-model outputs
@@ -275,17 +272,14 @@ New simulations with daylight < 12h instead of 11h. or considering the cutoff in
 # Read phenology dates from MODIS
 modis_pheno_sites <- readRDS("~/pep/data/modis_phenology/modis_pheno_sites.rds")
 # Read p-model outputs
-#modis_pmodel <- readRDS("~/pep/data/pmodel_output/modis_pmodel_output.rds")
-modis_pmodel <- readRDS("~/pep/data/pmodel_output/modis_pmodel_output_21Jun.rds")
-#modis_pmodel_old <- readRDS("~/pep/data/pmodel_output/modis_pmodel_output_old.rds")
+modis_pmodel <- readRDS("~/pep/data/pmodel_output/modis_pmodel_output_21J.rds")
 modis_pmodel <- modis_pmodel %>% 
   mutate(gpp_net = gpp - rd, 
          lue = gpp / apar)
 # Join datasets
 df_anl_modis <- modis_pheno_sites %>% 
-  right_join(modis_pmodel[,2:10], by = c("lon","lat","year"))
-df_anl_modis <- modis_pheno_sites %>% 
-  inner_join(modis_pmodel[,2:10], by = c("lon","lat","year"))
+  left_join(modis_pmodel[,2:10], by = c("lon","lat","year"))
+
 # Change variable names
 df_anl_modis <- df_anl_modis %>% rename(on = SOS_2_doy, off = EOS_2_doy) # Select the pheno band
 df_anl_modis <- df_anl_modis %>% filter(off>on)
@@ -502,7 +496,7 @@ gg_lt_pep_mean_cAtot + gg_lt_pep_anom_cAtot + gg_lt_pep_anom_year
 
 ```{r}
 fit_iav_pep_off_vs_gppnet = lmer(off ~ scale(gpp_net) + (1|id_site) + (1|species), data = df_anl_pmodel_zz, na.action = "na.exclude")
-fit_iav_pep_off_vs_gppnet = lmer(off ~ scale(gpp_net) + (1|id_site) + (1|sitename), data = df_anl_pmodel_zz, na.action = "na.exclude")
+#fit_iav_pep_off_vs_gppnet = lmer(off ~ scale(gpp_net) + (1|sitename), data = df_anl_pmodel_zz, na.action = "na.exclude")
 summary(fit_iav_pep_off_vs_gppnet)
 r.squaredGLMM(fit_iav_pep_off_vs_gppnet)
 plot(allEffects(fit_iav_pep_off_vs_gppnet))

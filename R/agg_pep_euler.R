@@ -35,5 +35,6 @@ df_out <- df_out %>%
     alpha = mean(alpha, na.rm = TRUE)
   )
 
-saveRDS(df_out, "/cluster/work/climate/bestocke/data/pep_pmodel_output/modis/modis_pmodel_output_21Jun.rds")
+#saveRDS(df_out, "/cluster/work/climate/bestocke/data/pep_pmodel_output/pep725/pep725_pmodel_output_21JunCompleted.rds")
+saveRDS(df_out, "/cluster/work/climate/bestocke/data/pep_pmodel_output/modis/modis_pmodel_output_21JunCompleted.rds")
 
