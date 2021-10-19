@@ -11,6 +11,7 @@ library(tidyverse)
 library(lubridate)
 library(broom)
 library(devtools)
+library(dplyr)
 #devtools::install_github("stineb/rbeni")
 #devtools::load_all("~/rbeni/")
 #library(rbeni)
@@ -215,12 +216,12 @@ df_orig_wide <- df_orig %>%
    pivot_wider(names_from = "pheno", values_from = "day")
 
 # Merge ZZ with original PEP725
-df_anl <- df_anl %>% 
-  rename(on_zani = on, off_zani = off) %>% 
-  left_join(df_orig_wide, by = c("id_site", "species", "year"))
+#df_anl <- df_anl %>% 
+#  rename(on_zani = on, off_zani = off) %>% 
+#  left_join(df_orig_wide, by = c("id_site", "species", "year"))
 
-out <- df_anl %>% analyse_modobs2("off", "off_zani", type = "heat")
-out$gg
+#out <- df_anl %>% analyse_modobs2("off", "off_zani", type = "heat")
+#out$gg
 ```
 
 ### P-model outputs data
@@ -470,7 +471,7 @@ separate_anom <- function(df){
 df_anl <- df_anl %>% 
   group_by(id_species_site) %>% 
   nest() %>% 
-  mutate(data = map(data, ~separate_anom(.))) %>% 
+  mutate(data = purrr::map(data, ~separate_anom(.))) %>% 
   unnest(data)
 
 fit_lt_pep_anom_cAtot = lmer(off ~ scale(mean_cA_tot) + scale(anom_cA_tot) + scale(year) + (1|id_site) + (1|species), data = df_anl, na.action = "na.exclude")
@@ -513,7 +514,7 @@ gg_iav_pep_off_vs_gppnet
 
 ```{r}
 fit_lt_pep_off_vs_gppnet_year = lmer(off ~ scale(gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl_pmodel_zz, na.action = "na.exclude")
-fit_lt_pep_off_vs_gppnet_year = lmer(off ~ scale(gpp_net) + scale(year) + (1|id_site) + (1|sitename), data = df_anl_pmodel_zz, na.action = "na.exclude")
+#fit_lt_pep_off_vs_gppnet_year = lmer(off ~ scale(gpp_net) + scale(year) + (1|id_site) + (1|sitename), data = df_anl_pmodel_zz, na.action = "na.exclude")
 summary(fit_lt_pep_off_vs_gppnet_year)
 r.squaredGLMM(fit_lt_pep_off_vs_gppnet_year)
 plot(allEffects(fit_lt_pep_off_vs_gppnet_year))
@@ -529,7 +530,7 @@ gg_lt_pep_off_vs_gppnet + gg_lt_pep_off_vs_year3
 Is this better model than EOS ~ Anet?
 
 ```{r}
-out_anova <- anova(fit_iav_pm_gppnet, fit_lt_pm_gppnet)
+out_anova <- anova(fit_iav_pep_off_vs_gppnet, fit_lt_pep_off_vs_gppnet_year)
 out_anova
 ```
 
@@ -616,7 +617,7 @@ separate_anom <- function(df){
 df_anl_pmodel_zz <- df_anl_pmodel_zz %>% 
   group_by(sitename) %>% 
   nest() %>% 
-  mutate(data = map(data, ~separate_anom(.))) %>% 
+  mutate(data = purrr::map(data, ~separate_anom(.))) %>% 
   unnest(data)
 
 fit_lt_pep_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_anl_pmodel_zz, na.action = "na.exclude")
@@ -804,7 +805,7 @@ separate_anom <- function(df){
 df_anl_modis <- df_anl_modis %>% 
   group_by(sitename) %>% 
   nest() %>% 
-  mutate(data = map(data, ~separate_anom(.))) %>% 
+  mutate(data = purrr::map(data, ~separate_anom(.))) %>% 
   unnest(data)
 
 fit_lt_modis_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|sitename), data = df_anl_modis, na.action = "na.exclude")
@@ -899,12 +900,12 @@ gg_lt_pep_off_vs_year3 <- gg_lt_pep_off_vs_year3 +
 
 pp <- (gg_iav_pep_off_vs_cAtot + gg_lt_pep_off_vs_cAtot + gg_lt_pep_off_vs_year2)/(gg_iav_pep_off_vs_gppnet + gg_lt_pep_off_vs_gppnet + gg_lt_pep_off_vs_year3)
 pp + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_1.png", width = 9, height = 6)
+ggsave("~/pep/manuscript/fig_1.png", width = 9, height = 6, dpi=300)
 
 # With dual plot
 qq <- (gg_iav_pep_off_vs_cAtot + gg_lt_pep_off_vs_cAtot + gg_dual_pep_cAtot) / (gg_iav_pep_off_vs_gppnet + gg_lt_pep_off_vs_gppnet + gg_dual_pep_gppnet)
 qq + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_1b.png", width = 13, height = 8)
+ggsave("~/pep/manuscript/fig_1b.png", width = 13, height = 8, dpi=300)
 
 ```
 
@@ -913,30 +914,15 @@ ggsave("~/pep/manuscript/fig_1b.png", width = 13, height = 8)
 ```{r}
 # Anomalies Year as random
 gg_modis_mean_gppnet <- gg_modis_mean_gppnet +
-  labs(title = expression(paste("EOS ~ ", bold("Mean "), bolditalic("A")[bold(net)], " + Anomalies ", italic("A")[net])), subtitle = "MODIS data and P-model") + ggtitle("A") 
+  labs(title = expression(paste("EOS ~ ", bold("Mean "), bolditalic("A")[bold(net)], " + Anomalies ", italic("A")[net])), subtitle = "MODIS data and P-model") 
 
 gg_modis_anom_gppnet <- gg_modis_anom_gppnet +
-  labs(title = expression(paste("EOS ~ Mean ", italic("A")[net], " + " ,bold("Anomalies "), bolditalic("A")[bold(net)])), subtitle = "MODIS data and P-model") + ggtitle("B") 
+  labs(title = expression(paste("EOS ~ Mean ", italic("A")[net], " + " ,bold("Anomalies "), bolditalic("A")[bold(net)])), subtitle = "MODIS data and P-model") 
 
-# Other plots
-gg_iav_modis_off_vs_gppnet <- gg_iav_modis_off_vs_gppnet +
-  labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "MODIS data and P-model")
+qq <- gg_modis_mean_gppnet + gg_modis_anom_gppnet
+qq + plot_annotation(tag_levels = 'A')
 
-gg_lt_modis_off_vs_gppnet <- gg_lt_modis_off_vs_gppnet +
-  labs(title = expression(paste("EOS ~ ", bolditalic("A")[bold(net)], " + Year")), subtitle = "MODIS data and P-model")
-
-gg_lt_modis_off_vs_year2 <- gg_lt_modis_off_vs_year2 +
-  labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), subtitle = "MODIS data and P-model")
-
-# Anomalies with Year as a fixed factor
-gg_lt_modis_mean_gppnet <- gg_lt_modis_mean_gppnet +
-  labs(title = expression(paste("EOS ~ ", bold("Mean "), bolditalic("A")[bold(net)], " + Anomalies ", italic("A")[net], " + Year")), subtitle = "MODIS data and P-model")
-  
-gg_lt_modis_anom_gppnet <- gg_lt_modis_anom_gppnet +
-  labs(title = expression(paste("EOS ~ Mean ", italic("A")[net], " + " ,bold("Anomalies "), bolditalic("A")[bold(net)], " + Year")), subtitle = "MODIS data and P-model") 
-  
-gg_lt_modis_anom_year <- gg_lt_modis_anom_year +
-  labs(title = expression(paste("EOS ~ Mean ", italic("A")[net], " + Anomalies ", italic("A")[net],bold("Year"))), subtitle = "MODIS data and P-model") 
+ggsave("~/pep/manuscript/mean_anom.png", width = 6, height = 3)
 
 ```
 
@@ -967,29 +953,6 @@ df_anl_modis_agg <- df_anl_modis %>%
   summarise(mean_gpp = mean(gpp_net, na.rm = TRUE),mean_eos = mean(off)) %>% 
   rename(lon = lon_mid, lat = lat_mid)
 
-devtools::load_all("/Users/lmarques/rbeni/")
-plot_map4(df_anl_modis_agg, 
-                varnam = "mean_gpp", 
-                breaks = c(seq(0, 1, by = 0.2), 1.5, 2, 3, 5, 7, 10, 15, 20, 25, Inf), 
-                latmin = -60, latmax = 80,
-                spacing = "constant", 
-                combine = FALSE, 
-                colorscale = viridis::magma, 
-                legend_title = "(m)",
-                hillshade = FALSE,
-                rivers = FALSE,
-                expand_size_y = 0.5,
-                legend_direction = "vertical")
-
-plot_map3(df_anl_modis_agg, 
-                varnam = "mean_gpp", 
-                latmin = 15, latmax = 75,
-                spacing = "constant", 
-                #combine = FALSE, 
-                colorscale = viridis::magma, 
-                legend_title = expression(paste(italic("A")[net])),
-                expand_size_y = 0.5)
-
 # Generate map and zoom
 world <- ne_countries(scale = "medium", returnclass = "sf")
 class(world)
@@ -998,41 +961,34 @@ ggplot(data = world) +
   annotation_scale(location = "bl") + 
   coord_sf(xlim = c(-180, 180), ylim = c(15, 75))
 
-map_gpp <- ggplot(data = world) + 
-  geom_sf(fill= "grey",size=.3) + #antiquewhite
-  #annotation_scale(location = "bl", width_hint = 0.1) + 
-  #annotation_north_arrow(location = "br", which_north = "true", height = unit(1, "cm"), width  = unit(1, "cm"), pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"),style = north_arrow_fancy_orienteering) + 
-  coord_sf(xlim = c(-180, 180), ylim = c(15, 75), expand = F) +
-  ggtitle("D") + 
-  geom_point(data = df_anl_modis_agg, aes(x = lon, y = lat, color = mean_gpp),size=.3) +
-  labs(color=expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")"))) +
-  scale_color_viridis(option="magma",limits=c(80,2200), breaks= seq(500,2000,500)) +
-  theme(legend.position="right", #panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), 
-        panel.background = element_rect(fill = "aliceblue"),axis.title=element_blank(),plot.title = element_text(size = 10))
-
 map_eos <- ggplot(data = world) + 
   geom_sf(fill= "grey",size=.3) + #antiquewhite
   #annotation_scale(location = "bl", width_hint = 0.1) + 
   #annotation_north_arrow(location = "br", which_north = "true", height = unit(1, "cm"), width  = unit(1, "cm"), pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"),style = north_arrow_fancy_orienteering) + 
   coord_sf(xlim = c(-180, 180), ylim = c(15, 75), expand = F) +
-  ggtitle("C") + 
   geom_point(data = df_anl_modis_agg, aes(x = lon, y = lat, color = mean_eos),size=.3) +
   labs(color="EOS (DOY)") +
   scale_color_viridis(option="viridis",limits=c(235,342), breaks= seq(260,340,20)) +
   theme(legend.position="right", #panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), 
         panel.background = element_rect(fill = "aliceblue"),axis.title=element_blank(),plot.title = element_text(size = 10)) 
 
-ggsave("~/pep/manuscript/map_eos.png", width = 8, height = 4)
-ggsave("~/pep/manuscript/map_qpp.png", width = 8, height = 4)
-ggsave("~/pep/manuscript/mean_anom.png", width = 6, height = 3)
+map_gpp <- ggplot(data = world) + 
+  geom_sf(fill= "grey",size=.3) + #antiquewhite
+  #annotation_scale(location = "bl", width_hint = 0.1) + 
+  #annotation_north_arrow(location = "br", which_north = "true", height = unit(1, "cm"), width  = unit(1, "cm"), pad_x = unit(0.1, "in"), pad_y = unit(0.1, "in"),style = north_arrow_fancy_orienteering) + 
+  coord_sf(xlim = c(-180, 180), ylim = c(15, 75), expand = F) +
+  geom_point(data = df_anl_modis_agg, aes(x = lon, y = lat, color = mean_gpp),size=.3) +
+  labs(color=expression(paste(italic("A")[net], " (gC m"^-2, " yr"^-1, ")"))) +
+  scale_color_viridis(option="magma",limits=c(80,2200), breaks= seq(500,2000,500)) +
+  theme(legend.position="right", #panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), 
+        panel.background = element_rect(fill = "aliceblue"),axis.title=element_blank(),plot.title = element_text(size = 10))
 
-# Plot together
-pp <- gg_modis_mean_gppnet + gg_modis_anom_gppnet
-qq <- map_eos / map_gpp
+plot_grid(map_gpp,map_eos,align = "v", ncol = 1, nrow = 2, rel_heights = c(1, 1),rel_widths = c(1, 1))
 
-ggarrange(pp,qq,ncol = 1, nrow = 2,align = "v",widths = c(1/2,3), heights = c(1,1))
-plot_grid(pp,qq,align = "v", ncol = 1, nrow = 2, rel_heights = c(1/2, 1),rel_widths = c(1/3, 1))
-ggsave("~/pep/manuscript/fig_2.png", width = 7, height = 10)
+rr <- map_gpp / map_eos
+rr + plot_annotation(tag_levels = list(c('C', 'D')))
+
+ggsave("~/pep/manuscript/maps.png", width = 8, height = 8)
 ```
 
 ## Supplementary Fig. 1
