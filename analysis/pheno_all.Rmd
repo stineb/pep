@@ -562,7 +562,7 @@ ff_lt_pep_off_vs_year3 <- gg_lt_pep_off_vs_year3 +
 
 pp <- (ff_iav_pep_off_vs_cAtot + ff_lt_pep_off_vs_cAtot + ff_lt_pep_off_vs_year2)/(ff_iav_pep_off_vs_gppnet + ff_lt_pep_off_vs_gppnet + ff_lt_pep_off_vs_year3)
 pp + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_1_Sc.png", width = 9, height = 6, dpi=300)
+ggsave("~/pep/manuscript/fig_1_Sc.png", width = 11, height = 7, dpi=300)
 
 ```
 
@@ -590,7 +590,7 @@ ff_lt_pep_gppnet_vs_year <- gg_lt_pep_gppnet_vs_year +
 
 ss1 <- (ff_iav_pep_off_vs_on + ff_lt_pep_off_vs_on + ff_lt_pep_off_vs_year1) / (ff_lt_pep_on_vs_year + ff_lt_pep_cAtot_vs_year + ff_lt_pep_gppnet_vs_year)
 ss1 + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_2_Sc.png", width = 9, height = 6, dpi=300)
+ggsave("~/pep/manuscript/fig_2_Sc.png", width = 11, height = 7, dpi=300)
 
 ```
 
@@ -618,7 +618,7 @@ ff_lt_modis_gppnet_vs_year <- gg_lt_modis_gppnet_vs_year +
 
 ss2 <- (ff_lt_modis_off_vs_on + ff_lt_modis_off_vs_year1 + ff_lt_modis_on_vs_year) / (ff_modis_mean_gppnet + ff_modis_anom_gppnet + ff_lt_modis_gppnet_vs_year)
 ss2 + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_3_Sc.png", width = 9, height = 6, dpi=300)
+ggsave("~/pep/manuscript/fig_3_Sc.png", width = 11, height = 7, dpi=300)
 
 ```
 
@@ -679,9 +679,7 @@ map_gpp <- ggplot(data = world) +
   theme(legend.position="right", #panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), 
         panel.background = element_rect(fill = "aliceblue"),axis.title=element_blank(),plot.title = element_text(size = 10))
 
-plot_grid(map_gpp,map_eos,align = "v", ncol = 1, nrow = 2, rel_heights = c(1, 1),rel_widths = c(1, 1))
-
-rr <- map_gpp / map_eos
+rr <- map_eos / map_gpp
 rr + plot_annotation(tag_levels = list(c('A', 'B')))
 
 ggsave("~/pep/manuscript/fig_4_Sc.png", width = 8, height = 8, dpi=300)
