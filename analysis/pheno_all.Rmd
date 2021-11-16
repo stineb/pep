@@ -161,6 +161,33 @@ ggplot_anom_gpp_net <- function(x){
   
   return(gg)
 }
+
+ggplot_mean_on <- function(x){
+  df <- tibble(upper = x$`scale(mean_on)`$upper[,1],
+               lower = x$`scale(mean_on)`$lower[,1],
+               off = x$`scale(mean_on)`$fit[,1],
+               mean_on = x$`scale(mean_on)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = mean_on, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(mean_on, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = "Mean SOS (DOY)", y = "EOS (DOY)")
+  return(gg)
+}
+
+ggplot_anom_on <- function(x){
+  df <- tibble(upper = x$`scale(anom_on)`$upper[,1],
+               lower = x$`scale(anom_on)`$lower[,1],
+               off   = x$`scale(anom_on)`$fit[,1],
+               anom_on = x$`scale(anom_on)`$x[,1])
+  gg <- ggplot() + 
+    geom_ribbon(data = df, aes(x = anom_on, ymin = lower, ymax = upper), alpha = 0.2) +
+    geom_line(data = df, aes(anom_on, off), col = "royalblue") +
+    theme_classic() +
+    labs(x = "Anomalies SOS (DOY)", y = "EOS (DOY)")
+  
+  return(gg)
+}
 ```
 
 ## Load data
@@ -176,6 +203,7 @@ df_zz <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv
   rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
          anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
          species = Species, id_site = PEP_ID, id_species_site = timeseries)
+min(pep725_pmodel$year)
 ```
 
 ### P-model outputs data
@@ -213,13 +241,14 @@ df_modis <- modis_pheno_sites %>%
 # Change variable names
 df_modis <- df_modis %>% rename(on = SOS_2_doy, off = EOS_2_doy) # Select the pheno band
 df_modis <- df_modis %>% filter(off>on)
+max(df_modis$year)
 ```
 
 ## Zani et al. data
 
 ### Interannual variation (IAV)
 
-#### Start-of-Season (SOS) - Fig 2A
+#### Start-of-Season (SOS) - Fig 2C
 
 ```{r}
 fit_iav_pep_off_vs_on = lmer(off ~ scale(on) + (1|id_site) + (1|species) , data = df_zz, na.action = "na.exclude")
@@ -233,7 +262,7 @@ gg_iav_pep_off_vs_on <- ggplot_on(out_iav_pep_off_vs_on)
 gg_iav_pep_off_vs_on
 ```
 
-#### Anet LPJ - Fig 1A
+#### Anet LPJ - Fig 1C
 
 ```{r}
 fit_iav_pep_off_vs_cAtot = lmer(off ~ scale(cA_tot) + (1|id_site) + (1|species) , data = df_zz, na.action = "na.exclude")
@@ -265,6 +294,13 @@ gg_lt_pep_off_vs_year1 <- ggplot_year(out_lt_pep_off_vs_on_year)
 gg_lt_pep_off_vs_on + gg_lt_pep_off_vs_year1
 ```
 
+Is this better model than EOS ~ SOS?
+
+```{r}
+out_anova <- anova(fit_iav_pep_off_vs_on, fit_lt_pep_off_vs_on_year)
+out_anova
+```
+
 #### SOS - Fig 2D
 
 ```{r}
@@ -275,6 +311,19 @@ out_lt_pep_on_vs_year <- allEffects(fit_lt_pep_on_vs_year)
 gg_lt_pep_on_vs_year <- ggplot_year(out_lt_pep_on_vs_year)
 gg_lt_pep_on_vs_year <- gg_lt_pep_on_vs_year + ylab("SOS (DOY)") 
 gg_lt_pep_on_vs_year
+```
+
+#### EOS - Fig 2D
+
+```{r}
+fit_lt_pep_off_vs_year <- lmer(off ~ scale(year) + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
+summary(fit_lt_pep_off_vs_year)
+plot(allEffects(fit_lt_pep_off_vs_year))
+
+out_lt_pep_off_vs_year <- allEffects(fit_lt_pep_off_vs_year)
+gg_lt_pep_off_vs_year <- ggplot_year(out_lt_pep_off_vs_year)
+gg_lt_pep_off_vs_year <- gg_lt_pep_off_vs_year + ylab("SOS (DOY)") 
+gg_lt_pep_off_vs_year
 ```
 
 #### Anet LPJ - Fig 1B and 1C 
@@ -525,6 +574,41 @@ gg_modis_mean_gppnet + gg_modis_anom_gppnet
 
 ```
 
+#### SOS 
+
+Separate mean across years 2001-2018 from interannual anomaly.
+
+```{r eval=FALSE}
+separate_anom <- function(df){
+  df_mean <- df %>% 
+    #dplyr::filter(year %in% 2001:2018) %>% 
+    summarise(mean_off = mean(off, na.rm = TRUE), 
+              mean_on = mean(on, na.rm = TRUE))
+  df %>% 
+    mutate(mean_on = df_mean$mean_on,
+           anom_on = on - df_mean$mean_on)
+}
+
+df_modis <- df_modis %>% 
+  group_by(sitename) %>% 
+  nest() %>% 
+  mutate(data = purrr::map(data, ~separate_anom(.))) %>% 
+  unnest(data)
+
+fit_lt_modis_anom_on = lmer(off ~ scale(mean_on) + scale(anom_on) + (1|sitename) + (1|year), data = df_modis, na.action = "na.exclude")
+summary(fit_lt_modis_anom_on)
+plot(allEffects(fit_lt_modis_anom_on))
+r.squaredGLMM(fit_lt_modis_anom_on)
+
+aic_lt_modis_anom_on <- AIC(fit_lt_modis_anom_on)
+out_lt_modis_anom_on <- allEffects(fit_lt_modis_anom_on)
+gg_lt_modis_mean_on <- ggplot_mean_on(out_lt_modis_anom_on)
+gg_lt_modis_anom_on <- ggplot_anom_on(out_lt_modis_anom_on)
+
+gg_lt_modis_mean_on + gg_lt_modis_anom_on
+
+```
+
 ## Figure 1
 
 ```{r}
@@ -560,9 +644,13 @@ ff_lt_pep_off_vs_year3 <- gg_lt_pep_off_vs_year3 +
   scale_y_continuous( limits = c(276,293),breaks = seq(270,300,5)) + 
   scale_x_continuous(limits = c(1950,2021), breaks = seq(1960,2020,20))
 
-pp <- (ff_iav_pep_off_vs_cAtot + ff_lt_pep_off_vs_cAtot + ff_lt_pep_off_vs_year2)/(ff_iav_pep_off_vs_gppnet + ff_lt_pep_off_vs_gppnet + ff_lt_pep_off_vs_year3)
+pp <- ff_lt_pep_off_vs_cAtot + ff_lt_pep_off_vs_year2 + ff_iav_pep_off_vs_cAtot
 pp + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_1_Sc.png", width = 11, height = 7, dpi=300)
+ggsave("~/pep/manuscript/fig_1.png", width = 8, height = 3, dpi=300)
+
+pp <- ff_lt_pep_off_vs_gppnet + ff_lt_pep_off_vs_year3 + ff_iav_pep_off_vs_gppnet
+pp + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/fig_S1.png", width = 8, height = 3, dpi=300)
 
 ```
 
@@ -588,9 +676,13 @@ ff_lt_pep_cAtot_vs_year <- gg_lt_pep_cAtot_vs_year +
 ff_lt_pep_gppnet_vs_year <- gg_lt_pep_gppnet_vs_year +
   labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "PEP data and P-model")
 
-ss1 <- (ff_iav_pep_off_vs_on + ff_lt_pep_off_vs_on + ff_lt_pep_off_vs_year1) / (ff_lt_pep_on_vs_year + ff_lt_pep_cAtot_vs_year + ff_lt_pep_gppnet_vs_year)
+ss1 <- ff_lt_pep_off_vs_on + ff_lt_pep_off_vs_year1 + ff_iav_pep_off_vs_on
 ss1 + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_2_Sc.png", width = 11, height = 7, dpi=300)
+ggsave("~/pep/manuscript/fig_2.png", width = 8, height = 3, dpi=300)
+
+ss1 <- ff_lt_pep_cAtot_vs_year + ff_lt_pep_gppnet_vs_year + ff_lt_pep_on_vs_year
+ss1 + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/fig_S2.png", width = 8, height = 3, dpi=300)
 
 ```
 
@@ -613,12 +705,22 @@ ff_modis_mean_gppnet <- gg_modis_mean_gppnet +
 ff_modis_anom_gppnet <- gg_modis_anom_gppnet +
   labs(title = expression(paste("EOS ~ Mean ", italic("A")[net], " + " ,bold("Anomalies "), bolditalic("A")[bold(net)])), subtitle = "MODIS data and P-model") 
 
+ff_lt_modis_mean_on <- gg_lt_modis_mean_on +
+  labs(title = expression(paste("EOS ~ ", bold("Mean SOS"), " + Anomalies SOS")), subtitle = "MODIS data") 
+
+ff_lt_modis_anom_on <- gg_lt_modis_anom_on +
+  labs(title = expression(paste("EOS ~ Mean SOS + ", bold("Anomalies SOS"))), subtitle = "MODIS data") 
+
 ff_lt_modis_gppnet_vs_year <- gg_lt_modis_gppnet_vs_year +
   labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "MODIS data and P-model")
 
-ss2 <- (ff_lt_modis_off_vs_on + ff_lt_modis_off_vs_year1 + ff_lt_modis_on_vs_year) / (ff_modis_mean_gppnet + ff_modis_anom_gppnet + ff_lt_modis_gppnet_vs_year)
-ss2 + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_3_Sc.png", width = 11, height = 7, dpi=300)
+ff <- ff_modis_mean_gppnet + ff_modis_anom_gppnet
+ff + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/fig_3a.png", width = 7.5, height = 4, dpi=300)
+
+ff <- ff_lt_modis_mean_on + ff_lt_modis_anom_on
+ff + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/fig_S3.png", width = 7.5, height = 4, dpi=300)
 
 ```
 
@@ -657,6 +759,11 @@ ggplot(data = world) +
   annotation_scale(location = "bl") + 
   coord_sf(xlim = c(-180, 180), ylim = c(15, 75))
 
+ggplot(data = world) +
+  geom_sf() +
+  annotation_scale(location = "bl") + 
+  coord_sf(crs = "+proj=merc")
+
 map_eos <- ggplot(data = world) + 
   geom_sf(fill= "grey",size=.3) + #antiquewhite
   #annotation_scale(location = "bl", width_hint = 0.1) + 
@@ -680,9 +787,13 @@ map_gpp <- ggplot(data = world) +
         panel.background = element_rect(fill = "aliceblue"),axis.title=element_blank(),plot.title = element_text(size = 10))
 
 rr <- map_eos / map_gpp
-rr + plot_annotation(tag_levels = list(c('A', 'B')))
+rr + plot_annotation(tag_levels = list(c('C', 'D')))
 
-ggsave("~/pep/manuscript/fig_4_Sc.png", width = 8, height = 8, dpi=300)
+ff <- (ff_modis_mean_gppnet + ff_modis_anom_gppnet)/map_eos / map_gpp
+ff + plot_annotation(tag_levels = 'A') + 
+  plot_layout(heights = c(1,2,2))
+
+ggsave("~/pep/manuscript/fig_3b.png", width = 8, height = 6, dpi=300)
 ```
 
 ## Supplementary Fig. 1

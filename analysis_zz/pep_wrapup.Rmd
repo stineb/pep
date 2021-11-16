@@ -10,7 +10,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(lubridate)
 library(broom)
-library(rbeni)
+#library(rbeni)
 library(lme4) #lmer
 library(MuMIn) #r.squaredGLMM
 library(lmerTest) #p-values
@@ -102,7 +102,8 @@ df <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv") 
   rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
          anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
          species = Species, id_site = PEP_ID, id_species_site = timeseries)
-  
+
+min(df_orig$year) 
   # ## use the non-water-stressed version of A
   # mutate(cA_tot = `cA_tot-w`)
 
