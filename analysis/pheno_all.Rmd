@@ -203,7 +203,6 @@ df_zz <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv
   rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
          anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
          species = Species, id_site = PEP_ID, id_species_site = timeseries)
-min(pep725_pmodel$year)
 ```
 
 ### P-model outputs data
@@ -305,12 +304,33 @@ out_anova
 
 ```{r}
 fit_lt_pep_on_vs_year <- lmer(on ~ scale(year) + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
-summary(fit_lt_pep_on_vs_year)
+out <- summary(fit_lt_pep_on_vs_year)
+print(out)
+
+trend_unscaled <- out$coefficients["scale(year)","Estimate"]/ sd(df_zz$year)
+error_unscaled <- out$coefficients["scale(year)","Std. Error"]/ sd(df_zz$year)
+print(paste("Temporal trend: ", round(trend_unscaled, digits = 3), "+/-", round(error_unscaled, digits = 3), "d/yr"))
 
 out_lt_pep_on_vs_year <- allEffects(fit_lt_pep_on_vs_year)
 gg_lt_pep_on_vs_year <- ggplot_year(out_lt_pep_on_vs_year)
 gg_lt_pep_on_vs_year <- gg_lt_pep_on_vs_year + ylab("SOS (DOY)") 
 gg_lt_pep_on_vs_year
+```
+
+Univariate relationship for EOS trend.
+```{r}
+fit_lt_pep_off_vs_year <- lmer(off ~ scale(year) + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
+out <- summary(fit_lt_pep_off_vs_year)
+print(out)
+
+trend_unscaled <- out$coefficients["scale(year)","Estimate"]/ sd(df_zz$year)
+error_unscaled <- out$coefficients["scale(year)","Std. Error"]/ sd(df_zz$year)
+print(paste("Temporal trend: ", round(trend_unscaled, digits = 3), "+/-", round(error_unscaled, digits = 3), "d/yr"))
+
+out_lt_pep_off_vs_year <- allEffects(fit_lt_pep_off_vs_year)
+gg_lt_pep_off_vs_year <- ggplot_year(out_lt_pep_off_vs_year)
+gg_lt_pep_off_vs_year <- gg_lt_pep_off_vs_year + ylab("EOS (DOY)") 
+gg_lt_pep_off_vs_year
 ```
 
 #### EOS - Fig 2D
