@@ -360,6 +360,13 @@ out_lt_pep_off_vs_year <- allEffects(fit_lt_pep_off_vs_year)
 gg_lt_pep_off_vs_year <- ggplot_year(out_lt_pep_off_vs_year)
 gg_lt_pep_off_vs_year <- gg_lt_pep_off_vs_year + ylab("EOS (DOY)") 
 gg_lt_pep_off_vs_year
+
+# Univariate model without scaling predictor
+fit_lt_pep_off_vs_yearNS <- lmer(off ~ year + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
+out_ns <- summary(fit_lt_pep_off_vs_yearNS)
+print(out_ns)
+upperCI <- out_ns$coefficients["year","Estimate"] + out_ns$coefficient["year","Std. Error"]*1.96
+lowerCI <- out_ns$coefficients["year","Estimate"] - out_ns$coefficient["year","Std. Error"]*1.96
 ```
 
 #### Anet LPJ - Fig 1B and 1C 
@@ -583,19 +590,6 @@ df_modis <- df_modis %>%
   mutate(data = purrr::map(data, ~separate_anom(.))) %>% 
   unnest(data)
 
-fit_lt_modis_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + scale(year) + (1|sitename), data = df_modis, na.action = "na.exclude")
-summary(fit_lt_modis_anom_gppnet)
-plot(allEffects(fit_lt_modis_anom_gppnet))
-r.squaredGLMM(fit_lt_modis_anom_gppnet)
-
-aic_lt_modis_anom_gppnet <- AIC(fit_lt_modis_anom_gppnet)
-out_lt_modis_anom_gppnet <- allEffects(fit_lt_modis_anom_gppnet)
-gg_lt_modis_mean_gppnet <- ggplot_mean_gpp_net(out_lt_modis_anom_gppnet)
-gg_lt_modis_anom_gppnet <- ggplot_anom_gpp_net(out_lt_modis_anom_gppnet)
-gg_lt_modis_anom_year   <- ggplot_year(out_lt_modis_anom_gppnet)
-
-gg_lt_modis_mean_gppnet + gg_lt_modis_anom_gppnet + gg_lt_modis_anom_year
-
 fit_modis_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + (1|sitename) + (1|year), data = df_modis, na.action = "na.exclude")
 summary(fit_modis_anom_gppnet)
 plot(allEffects(fit_modis_anom_gppnet))
@@ -648,121 +642,39 @@ gg_lt_modis_mean_on + gg_lt_modis_anom_on
 ## Figure 1
 
 ```{r}
+ff_lt_pep_off_vs_year2 <- gg_lt_pep_off_vs_year2 +
+  labs(title = expression(paste("EOS ~ ", bold("Year"), " + ", italic("A")[net])), subtitle = "PEP data and LPJ-GUESS") + 
+  scale_y_continuous( limits = c(270,294),breaks = seq(270,290,10)) + 
+  scale_x_continuous(limits = c(1950,2021), breaks = seq(1960,2020,20))
+
+ff_lt_pep_off_vs_cAtot <- gg_lt_pep_off_vs_cAtot +
+  labs(title = expression(paste("EOS ~ Year + ", bolditalic("A")[bold(net)])), subtitle = "PEP data and LPJ-GUESS") + 
+  scale_y_continuous( limits = c(210,365),breaks = seq(240,360,40)) + 
+  scale_x_continuous(limits = c(350,2400), breaks = seq(500,2400,500))
+
 ff_iav_pep_off_vs_cAtot <- gg_iav_pep_off_vs_cAtot +
   labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "PEP data and LPJ-GUESS") +
   theme(plot.background = element_rect(fill = "grey")) + 
   scale_y_continuous( limits = c(210,365),breaks = seq(240,360,40)) + 
   scale_x_continuous(limits = c(350,2400), breaks = seq(500,2400,500))
 
-ff_lt_pep_off_vs_cAtot <- gg_lt_pep_off_vs_cAtot +
-  labs(title = expression(paste("EOS ~ ", bolditalic("A")[bold(net)], " + Year")), subtitle = "PEP data and LPJ-GUESS") + 
-  scale_y_continuous( limits = c(210,365),breaks = seq(240,360,40)) + 
-  scale_x_continuous(limits = c(350,2400), breaks = seq(500,2400,500))
-
-ff_lt_pep_off_vs_year2 <- gg_lt_pep_off_vs_year2 +
-  labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), subtitle = "PEP data and LPJ-GUESS") + 
-  scale_y_continuous( limits = c(270,294),breaks = seq(270,290,10)) + 
-  scale_x_continuous(limits = c(1950,2021), breaks = seq(1960,2020,20))
-
-ff_iav_pep_off_vs_gppnet <- gg_iav_pep_off_vs_gppnet +
-  labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "PEP data and P-model") +
-  theme(plot.background = element_rect(fill = "grey")) + 
-  scale_y_continuous( limits = c(278,291),breaks = seq(280,290,5)) + 
-  scale_x_continuous(limits = c(200,1400), breaks = seq(500,1000,500))
-
-ff_lt_pep_off_vs_gppnet <- gg_lt_pep_off_vs_gppnet +
-  labs(title = expression(paste("EOS ~ ", bolditalic("A")[bold(net)], " + Year")), subtitle = "PEP data and P-model") + 
-  scale_y_continuous( limits = c(273,300),breaks = seq(270,300,10)) + 
-  scale_x_continuous(limits = c(240,1400), breaks = seq(500,1000,500))
-
-ff_lt_pep_off_vs_year3 <- gg_lt_pep_off_vs_year3 +
-  labs(title = expression(paste("EOS ~ ", italic("A")[net], " + ", bold("Year"))), subtitle = "PEP data and P-model")  + 
-  scale_y_continuous( limits = c(276,293),breaks = seq(270,300,5)) + 
-  scale_x_continuous(limits = c(1950,2021), breaks = seq(1960,2020,20))
-
-pp <- ff_lt_pep_off_vs_cAtot + ff_lt_pep_off_vs_year2 + ff_iav_pep_off_vs_cAtot
-pp + plot_annotation(tag_levels = 'A')
+pp1 <- ff_lt_pep_off_vs_year2 + ff_lt_pep_off_vs_cAtot + ff_iav_pep_off_vs_cAtot
+pp1 + plot_annotation(tag_levels = 'A')
 ggsave("~/pep/manuscript/fig_1.png", width = 8, height = 3, dpi=300)
-
-pp <- ff_lt_pep_off_vs_gppnet + ff_lt_pep_off_vs_year3 + ff_iav_pep_off_vs_gppnet
-pp + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_S1.png", width = 8, height = 3, dpi=300)
-
 ```
 
-## Figure 2 
-
-```{r}
-ff_iav_pep_off_vs_on <- gg_iav_pep_off_vs_on +
-  labs(title = "EOS ~ SOS", subtitle = "PEP data") +
-  theme(plot.background = element_rect(fill = "grey"))
-
-ff_lt_pep_off_vs_on <- gg_lt_pep_off_vs_on +
-  labs(title = expression(paste("EOS ~ ", bold("SOS"), " + Year")), subtitle = "PEP data") 
-
-ff_lt_pep_off_vs_year1 <- gg_lt_pep_off_vs_year1 +
-  labs(title = expression(paste("EOS ~ SOS + ", bold("Year"))), subtitle = "PEP data") 
-
-ff_lt_pep_on_vs_year <- gg_lt_pep_on_vs_year +
-  labs(title = "SOS ~ Year", subtitle = "PEP data")
-
-ff_lt_pep_cAtot_vs_year <- gg_lt_pep_cAtot_vs_year +
-  labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "PEP data and LPJ-GUESS")
-
-ff_lt_pep_gppnet_vs_year <- gg_lt_pep_gppnet_vs_year +
-  labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "PEP data and P-model")
-
-ss1 <- ff_lt_pep_off_vs_on + ff_lt_pep_off_vs_year1 + ff_iav_pep_off_vs_on
-ss1 + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_2.png", width = 8, height = 3, dpi=300)
-
-ss1 <- ff_lt_pep_cAtot_vs_year + ff_lt_pep_gppnet_vs_year + ff_lt_pep_on_vs_year
-ss1 + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_S2.png", width = 8, height = 3, dpi=300)
-
-```
-
-## Figure 3
+## Figure 2
 
 ```{r}
 
-ff_lt_modis_off_vs_on <- gg_lt_modis_off_vs_on +
-  labs(title = expression(paste("EOS ~ ", bold("SOS"), " + Year")), subtitle = "MODIS data") 
-
-ff_lt_modis_off_vs_year1 <- gg_lt_modis_off_vs_year1 +
-  labs(title = expression(paste("EOS ~ SOS + ", bold("Year"))), subtitle = "MODIS data") 
-
-ff_lt_modis_on_vs_year <- gg_lt_modis_on_vs_year +
-  labs(title = "SOS ~ Year", subtitle = "MODIS data")
-
+# Plots
 ff_modis_mean_gppnet <- gg_modis_mean_gppnet +
   labs(title = expression(paste("EOS ~ ", bold("Mean "), bolditalic("A")[bold(net)], " + Anomalies ", italic("A")[net])), subtitle = "MODIS data and P-model") 
 
 ff_modis_anom_gppnet <- gg_modis_anom_gppnet +
   labs(title = expression(paste("EOS ~ Mean ", italic("A")[net], " + " ,bold("Anomalies "), bolditalic("A")[bold(net)])), subtitle = "MODIS data and P-model") 
 
-ff_lt_modis_mean_on <- gg_lt_modis_mean_on +
-  labs(title = expression(paste("EOS ~ ", bold("Mean SOS"), " + Anomalies SOS")), subtitle = "MODIS data") 
-
-ff_lt_modis_anom_on <- gg_lt_modis_anom_on +
-  labs(title = expression(paste("EOS ~ Mean SOS + ", bold("Anomalies SOS"))), subtitle = "MODIS data") 
-
-ff_lt_modis_gppnet_vs_year <- gg_lt_modis_gppnet_vs_year +
-  labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "MODIS data and P-model")
-
-ff <- ff_modis_mean_gppnet + ff_modis_anom_gppnet
-ff + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_3a.png", width = 7.5, height = 4, dpi=300)
-
-ff <- ff_lt_modis_mean_on + ff_lt_modis_anom_on
-ff + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_S3.png", width = 7.5, height = 4, dpi=300)
-
-```
-
-## Figure 4
-
-```{r}
+# Maps
 lon_breaks <- seq(from = floor(min(df_anl_modis$lon)), to = ceiling(max(df_anl_modis$lon)), by = 0.1)
 lat_breaks <- seq(from = floor(min(df_anl_modis$lat)), to = ceiling(max(df_anl_modis$lat)), by = 0.1)
 
@@ -787,19 +699,6 @@ df_modis_agg <- df_modis %>%
   summarise(mean_gpp = mean(gpp_net, na.rm = TRUE),mean_eos = mean(off)) %>% 
   rename(lon = lon_mid, lat = lat_mid)
 
-# Generate map and zoom
-world <- ne_countries(scale = "medium", returnclass = "sf")
-class(world)
-ggplot(data = world) +
-  geom_sf() +
-  annotation_scale(location = "bl") + 
-  coord_sf(xlim = c(-180, 180), ylim = c(15, 75))
-
-ggplot(data = world) +
-  geom_sf() +
-  annotation_scale(location = "bl") + 
-  coord_sf(crs = "+proj=merc")
-
 map_eos <- ggplot(data = world) + 
   geom_sf(fill= "grey",size=.3) + #antiquewhite
   #annotation_scale(location = "bl", width_hint = 0.1) + 
@@ -822,51 +721,86 @@ map_gpp <- ggplot(data = world) +
   theme(legend.position="right", #panel.grid.major = element_line(color = gray(.5), linetype = "dashed", size = 0.5), 
         panel.background = element_rect(fill = "aliceblue"),axis.title=element_blank(),plot.title = element_text(size = 10))
 
-rr <- map_eos / map_gpp
-rr + plot_annotation(tag_levels = list(c('C', 'D')))
+pp2 <- (ff_modis_mean_gppnet + ff_modis_anom_gppnet)/ map_eos / map_gpp
+pp2 + plot_annotation(tag_levels = 'A') + plot_layout(heights = c(1, 1.5, 1.5),widths = c(0.5, 1.5, 1.5))
+ggsave("~/pep/manuscript/fig_2.png", width = 7.5, height = 6.5, dpi=300)
 
-ff <- (ff_modis_mean_gppnet + ff_modis_anom_gppnet)/map_eos / map_gpp
-ff + plot_annotation(tag_levels = 'A') + 
-  plot_layout(heights = c(1,2,2))
-
-ggsave("~/pep/manuscript/fig_3b.png", width = 8, height = 6, dpi=300)
 ```
 
-## Supplementary Fig. 1
+## Supplementary Fig. S1
 
 ```{r}
-gg_iav_pep_off_vs_on <- gg_iav_pep_off_vs_on +
-  labs(title = "EOS ~ SOS", subtitle = "PEP data")
+ff_lt_pep_cAtot_vs_year <- gg_lt_pep_cAtot_vs_year +
+  labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "PEP data and LPJ-GUESS")
 
-gg_lt_pep_on_vs_year <- gg_lt_pep_on_vs_year +
-  labs(title = "SOS ~ Year", subtitle = "PEP data")
+ff_lt_pep_off_vs_year <- gg_lt_pep_off_vs_year +
+  labs(title = "EOS ~ Year", subtitle = "PEP data")
 
-gg_lt_pep_cAtot_vs_year <- gg_lt_pep_cAtot_vs_year +
-  labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "PEP data and LPG-GUESS")
-
-gg_lt_pep_gppnet_vs_year <- gg_lt_pep_gppnet_vs_year +
+ff_lt_pep_gppnet_vs_year <- gg_lt_pep_gppnet_vs_year +
   labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "PEP data and P-model")
 
-ss1 <- (gg_iav_pep_off_vs_on + gg_lt_pep_on_vs_year) / (gg_lt_pep_cAtot_vs_year + gg_lt_pep_gppnet_vs_year)
+ff_lt_pep_on_vs_year <- gg_lt_pep_on_vs_year +
+  labs(title = "SOS ~ Year", subtitle = "PEP data")
+
+ss1 <- (ff_lt_pep_cAtot_vs_year + ff_lt_pep_off_vs_year)/(ff_lt_pep_gppnet_vs_year + ff_lt_pep_on_vs_year)
 ss1 + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/Sup_fig_1.png", width = 8, height = 6)
+ggsave("~/pep/manuscript/fig_S1.png", width = 7.5, height = 7.5, dpi=300)
 ```
 
-## Supplementary Fig. 2
+## Supplementary Fig. S2
 
 ```{r}
-gg_iav_modis_off_vs_on <- gg_iav_modis_off_vs_on +
-  labs(title = "EOS ~ SOS", subtitle = "MODIS data")
+ff_lt_pep_off_vs_year3 <- gg_lt_pep_off_vs_year3 +
+  labs(title = expression(paste("EOS ~ ", bold("Year"), " + ", italic("A")[net])), subtitle = "PEP data and P-model") + 
+  scale_y_continuous( limits = c(276,293),breaks = seq(270,300,5)) + 
+  scale_x_continuous(limits = c(1950,2021), breaks = seq(1960,2020,20))
 
-gg_lt_modis_on_vs_year <- gg_lt_modis_on_vs_year +
-  labs(title = "SOS ~ Year", subtitle = "MODIS data")
+ff_lt_pep_off_vs_gppnet <- gg_lt_pep_off_vs_gppnet +
+  labs(title = expression(paste("EOS ~ Year + ", bolditalic("A")[bold(net)])), subtitle = "PEP data and P-model") + 
+  scale_y_continuous( limits = c(273,300),breaks = seq(270,300,10)) + 
+  scale_x_continuous(limits = c(240,1400), breaks = seq(500,1000,500))
 
-gg_lt_modis_gppnet_vs_year <- gg_lt_modis_gppnet_vs_year +
-  labs(title = expression(paste(italic("A")[net], " ~ Year")), subtitle = "MODIS data and P-model")
+ff_iav_pep_off_vs_gppnet <- gg_iav_pep_off_vs_gppnet +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "PEP data and P-model") +
+  theme(plot.background = element_rect(fill = "grey")) + 
+  scale_y_continuous( limits = c(278,291),breaks = seq(280,290,5)) + 
+  scale_x_continuous(limits = c(200,1400), breaks = seq(500,1000,500))
 
-ss2 <- gg_iav_modis_off_vs_on + gg_lt_modis_on_vs_year + gg_lt_modis_gppnet_vs_year
+ss2 <- ff_lt_pep_off_vs_year3 + ff_lt_pep_off_vs_gppnet + ff_iav_pep_off_vs_gppnet
 ss2 + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/Sup_fig_2.png", width = 9, height = 3)
+ggsave("~/pep/manuscript/fig_S2.png", width = 8, height = 3, dpi=300)
 ```
 
+## Supplementary Fig. S3
 
+```{r}
+ff_lt_pep_off_vs_year1 <- gg_lt_pep_off_vs_year1 +
+  labs(title = expression(paste("EOS ~ ", bold("Year"), " + SOS")), subtitle = "PEP data") 
+
+ff_lt_pep_off_vs_on <- gg_lt_pep_off_vs_on +
+  labs(title = expression(paste("EOS ~ Year + ", bold("SOS"))), subtitle = "PEP data") 
+
+ff_iav_pep_off_vs_on <- gg_iav_pep_off_vs_on +
+  labs(title = "EOS ~ SOS", subtitle = "PEP data") +
+  theme(plot.background = element_rect(fill = "grey"))
+
+ss3 <- ff_lt_pep_off_vs_year1 + ff_lt_pep_off_vs_on + ff_iav_pep_off_vs_on
+ss3 + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/fig_S3.png", width = 8, height = 3, dpi=300)
+```
+
+## Supplementary Fig. S4
+
+```{r}
+
+ff_lt_modis_mean_on <- gg_lt_modis_mean_on +
+  labs(title = expression(paste("EOS ~ ", bold("Mean SOS"), " + Anomalies SOS")), subtitle = "MODIS data") 
+
+ff_lt_modis_anom_on <- gg_lt_modis_anom_on +
+  labs(title = expression(paste("EOS ~ Mean SOS + ", bold("Anomalies SOS"))), subtitle = "MODIS data") 
+
+ss4 <- ff_lt_modis_mean_on + ff_lt_modis_anom_on
+ss4 + plot_annotation(tag_levels = 'A')
+ggsave("~/pep/manuscript/fig_S4.png", width = 7.5, height = 4, dpi=300)
+
+```
