@@ -20,6 +20,8 @@ library(MuMIn) #r.squaredGLMM
 library(lmerTest) #p-values
 library(effects) #plot effects
 library(sjPlot) #plot effects
+library(sjmisc)
+library(sjlabelled)
 library(patchwork)
 library(maps)
 library(viridis)
@@ -248,13 +250,18 @@ max(df_modis$year)
 
 ### Interannual variation (IAV)
 
-#### Start-of-Season (SOS) - Fig 2C
+#### EOS ~ SOS
 
 ```{r}
 fit_iav_pep_off_vs_on = lmer(off ~ scale(on) + (1|id_site) + (1|species) , data = df_zz, na.action = "na.exclude")
 summary(fit_iav_pep_off_vs_on)
+out <- summary(fit_iav_pep_off_vs_on)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
 r.squaredGLMM(fit_iav_pep_off_vs_on)
 plot(allEffects(fit_iav_pep_off_vs_on))
+tab_model(fit_iav_pep_off_vs_on)
 
 aic_iav_pep_off_vs_on <- AIC(fit_iav_pep_off_vs_on)
 out_iav_pep_off_vs_on <- allEffects(fit_iav_pep_off_vs_on)
@@ -262,29 +269,54 @@ gg_iav_pep_off_vs_on <- ggplot_on(out_iav_pep_off_vs_on)
 gg_iav_pep_off_vs_on
 ```
 
-#### Anet LPJ - Fig 1C
+#### EOS ~ Anet LPJ (Fig 1A)
 
 ```{r}
 fit_iav_pep_off_vs_cAtot = lmer(off ~ scale(cA_tot) + (1|id_site) + (1|species) , data = df_zz, na.action = "na.exclude")
-summary(fit_iav_pep_off_vs_cAtot)
+out <- summary(fit_iav_pep_off_vs_cAtot)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
+upperCI <- out$coefficients["scale(cA_tot)","Estimate"] + out$coefficient["scale(cA_tot)","Std. Error"]*1.96
+lowerCI <- out$coefficients["scale(cA_tot)","Estimate"] - out$coefficient["scale(cA_tot)","Std. Error"]*1.96
 r.squaredGLMM(fit_iav_pep_off_vs_cAtot)
 plot(allEffects(fit_iav_pep_off_vs_cAtot))
+tab_model(fit_iav_pep_off_vs_cAtot)
+# Unscaled
+trend_unscaled <- out$coefficients["scale(cA_tot)","Estimate"]/ sd(df_zz$cA_tot)
+error_unscaled <- out$coefficients["scale(cA_tot)","Std. Error"]/ sd(df_zz$cA_tot)
+upperCI_unscaled <- out$coefficients["scale(cA_tot)","Estimate"]/ sd(df_zz$cA_tot) + out$coefficient["scale(cA_tot)","Std. Error"]/ sd(df_zz$cA_tot)*1.96
+lowerCI_unscaled <- out$coefficients["scale(cA_tot)","Estimate"]/ sd(df_zz$cA_tot) - out$coefficient["scale(cA_tot)","Std. Error"]/ sd(df_zz$cA_tot)*1.96
 
 aic_iav_pep_off_vs_cAtot <- AIC(fit_iav_pep_off_vs_cAtot)
 out_iav_pep_off_vs_cAtot <- allEffects(fit_iav_pep_off_vs_cAtot)
 gg_iav_pep_off_vs_cAtot <- ggplot_cA_tot(out_iav_pep_off_vs_cAtot)
 gg_iav_pep_off_vs_cAtot
+
+# Univariate model without scaling predictor
+fit_iav_pep_off_vs_cAtotNS <- lmer(off ~ cA_tot + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
+out_ns <- summary(fit_iav_pep_off_vs_cAtotNS)
+print(out_ns)
+upperCI <- out_ns$coefficients["cA_tot","Estimate"] + out_ns$coefficient["cA_tot","Std. Error"]*1.96
+lowerCI <- out_ns$coefficients["cA_tot","Estimate"] - out_ns$coefficient["cA_tot","Std. Error"]*1.96
+
+tab_model(fit_iav_pep_off_vs_cAtotNS)
 ```
 
 ### Long-term (year)
 
-#### EOS - Fig 2B and 2C
+#### EOS ~ SOS + Year
 
 ```{r}
 fit_lt_pep_off_vs_on_year = lmer(off ~ scale(on) + scale(year) + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
 summary(fit_lt_pep_off_vs_on_year)
+out <- summary(fit_lt_pep_off_vs_on_year)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
 r.squaredGLMM(fit_lt_pep_off_vs_on_year)
 plot(allEffects(fit_lt_pep_off_vs_on_year))
+tab_model(fit_lt_pep_off_vs_on_year)
 
 aic_lt_pep_off_vs_on_year <- AIC(fit_lt_pep_off_vs_on_year)
 out_lt_pep_off_vs_on_year <- allEffects(fit_lt_pep_off_vs_on_year)
@@ -301,26 +333,7 @@ out_anova <- anova(fit_iav_pep_off_vs_on, fit_lt_pep_off_vs_on_year)
 out_anova
 ```
 
-#### SOS - Fig 2
-
-```{r}
-fit_lt_pep_on_vs_year <- lmer(on ~ scale(year) + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
-summary(fit_lt_pep_on_vs_year)
-sd(df_zz$year)
-
-fit_lt_pep_on_vs_year_Nostd <- lmer(on ~ year + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
-summary(fit_lt_pep_on_vs_year_Nostd)
-
-plot(allEffects(fit_lt_pep_on_vs_year))
-plot(allEffects(fit_lt_pep_on_vs_year_Nostd))
-
-out_lt_pep_on_vs_year <- allEffects(fit_lt_pep_on_vs_year)
-gg_lt_pep_on_vs_year <- ggplot_year(out_lt_pep_on_vs_year)
-gg_lt_pep_on_vs_year <- gg_lt_pep_on_vs_year + ylab("SOS (DOY)") 
-gg_lt_pep_on_vs_year
-```
-
-#### SOS - Fig 2D
+#### SOS ~ Year
 
 ```{r}
 fit_lt_pep_on_vs_year <- lmer(on ~ scale(year) + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
@@ -334,7 +347,6 @@ error_unscaled <- out$coefficients["scale(year)","Std. Error"]/ sd(df_zz$year)
 upperCI_unscaled <- out$coefficients["scale(year)","Estimate"]/ sd(df_zz$year) + out$coefficient["scale(year)","Std. Error"]/ sd(df_zz$year)*1.96
 lowerCI_unscaled <- out$coefficients["scale(year)","Estimate"]/ sd(df_zz$year) - out$coefficient["scale(year)","Std. Error"]/ sd(df_zz$year)*1.96
 print(paste("Temporal trend: ", round(trend_unscaled, digits = 3), "+/-", round(error_unscaled, digits = 3), "d/yr"))
-confint(fit_lt_pep_on_vs_year)
 out_lt_pep_on_vs_year <- allEffects(fit_lt_pep_on_vs_year)
 gg_lt_pep_on_vs_year <- ggplot_year(out_lt_pep_on_vs_year)
 gg_lt_pep_on_vs_year <- gg_lt_pep_on_vs_year + ylab("SOS (DOY)") 
@@ -347,6 +359,8 @@ print(out_ns)
 upperCI <- out_ns$coefficients["year","Estimate"] + out_ns$coefficient["year","Std. Error"]*1.96
 lowerCI <- out_ns$coefficients["year","Estimate"] - out_ns$coefficient["year","Std. Error"]*1.96
 ```
+
+#### EOS ~ Year
 
 Univariate relationship for EOS trend.
 ```{r}
@@ -369,13 +383,21 @@ upperCI <- out_ns$coefficients["year","Estimate"] + out_ns$coefficient["year","S
 lowerCI <- out_ns$coefficients["year","Estimate"] - out_ns$coefficient["year","Std. Error"]*1.96
 ```
 
-#### Anet LPJ - Fig 1B and 1C 
+#### EOS ~ Anet LPJ + Year 
 
 ```{r}
 fit_lt_pep_off_vs_cAtot_year = lmer(off ~ scale(cA_tot) + scale(year) + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
-summary(fit_lt_pep_off_vs_cAtot_year)
+out <- summary(fit_lt_pep_off_vs_cAtot_year)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
+upperCI1 <- out$coefficients["scale(cA_tot)","Estimate"] + out$coefficient["scale(cA_tot)","Std. Error"]*1.96
+lowerCI1 <- out$coefficients["scale(cA_tot)","Estimate"] - out$coefficient["scale(cA_tot)","Std. Error"]*1.96
+upperCI2 <- out$coefficients["scale(year)","Estimate"] + out$coefficient["scale(year)","Std. Error"]*1.96
+lowerCI2 <- out$coefficients["scale(year)","Estimate"] - out$coefficient["scale(year)","Std. Error"]*1.96
 r.squaredGLMM(fit_lt_pep_off_vs_cAtot_year)
 plot(allEffects(fit_lt_pep_off_vs_cAtot_year))
+tab_model(fit_lt_pep_off_vs_cAtot_year)
 
 aic_lt_pep_off_vs_cAtot_year <- AIC(fit_lt_pep_off_vs_cAtot_year)
 out_lt_pep_off_vs_cAtot_year <- allEffects(fit_lt_pep_off_vs_cAtot_year)
@@ -383,6 +405,22 @@ gg_lt_pep_off_vs_cAtot <- ggplot_cA_tot(out_lt_pep_off_vs_cAtot_year)
 gg_lt_pep_off_vs_year2 <- ggplot_year(out_lt_pep_off_vs_cAtot_year)
 
 gg_lt_pep_off_vs_cAtot + gg_lt_pep_off_vs_year2
+
+# Unscaled
+trend_unscaled <- out$coefficients["scale(year)","Estimate"]/ sd(df_zz$year)
+error_unscaled <- out$coefficients["scale(year)","Std. Error"]/ sd(df_zz$year)
+upperCI_unscaled <- out$coefficients["scale(year)","Estimate"]/ sd(df_zz$year) + out$coefficient["scale(year)","Std. Error"]/ sd(df_zz$year)*1.96
+lowerCI_unscaled <- out$coefficients["scale(year)","Estimate"]/ sd(df_zz$year) - out$coefficient["scale(year)","Std. Error"]/ sd(df_zz$year)*1.96
+
+# Bivariate model without scaling predictors
+fit_lt_pep_off_vs_cAtot_yearNS = lmer(off ~ cA_tot + year + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
+out_ns <- summary(fit_lt_pep_off_vs_cAtot_yearNS)
+print(out_ns)
+upperCI1 <- out_ns$coefficients["cA_tot","Estimate"] + out_ns$coefficient["cA_tot","Std. Error"]*1.96
+lowerCI1 <- out_ns$coefficients["cA_tot","Estimate"] - out_ns$coefficient["cA_tot","Std. Error"]*1.96
+upperCI2 <- out_ns$coefficients["year","Estimate"] + out_ns$coefficient["year","Std. Error"]*1.96
+lowerCI2 <- out_ns$coefficients["year","Estimate"] - out_ns$coefficient["year","Std. Error"]*1.96
+
 ```
 
 Is this better model than EOS ~ Anet?
@@ -392,7 +430,7 @@ out_anova <- anova(fit_iav_pep_off_vs_cAtot, fit_lt_pep_off_vs_cAtot_year)
 out_anova
 ```
 
-#### Long-term trend in Anet - Fig 2E
+#### Anet ~ Year
 
 ```{r}
 fit_lt_pep_cAtot_vs_year <- lmer(cA_tot ~ scale(year) + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
@@ -410,13 +448,18 @@ gg_lt_pep_cAtot_vs_year
 
 ### Interannual variation (IAV)
 
-#### Anet P-model - Fig 1D
+#### EOS ~ Anet p-model
 
 ```{r}
 fit_iav_pep_off_vs_gppnet = lmer(off ~ scale(gpp_net) + (1|id_site) + (1|species), data = df_zz_pmodel, na.action = "na.exclude")
 summary(fit_iav_pep_off_vs_gppnet)
+out <- summary(fit_iav_pep_off_vs_gppnet)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
 r.squaredGLMM(fit_iav_pep_off_vs_gppnet)
 plot(allEffects(fit_iav_pep_off_vs_gppnet))
+tab_model(fit_iav_pep_off_vs_gppnet)
 
 aic_iav_pep_off_vs_gppnet <- AIC(fit_iav_pep_off_vs_gppnet)
 out_pep_off_vs_gppnet <- allEffects(fit_iav_pep_off_vs_gppnet)
@@ -426,13 +469,18 @@ gg_iav_pep_off_vs_gppnet
 
 ### Long-term (year)
 
-#### Anet P-model - Fig 1E and 1F
+#### EOS ~ Anet P-model + Year
 
 ```{r}
 fit_lt_pep_off_vs_gppnet_year = lmer(off ~ scale(gpp_net) + scale(year) + (1|id_site) + (1|species), data = df_zz_pmodel, na.action = "na.exclude")
 summary(fit_lt_pep_off_vs_gppnet_year)
+out <- summary(fit_lt_pep_off_vs_gppnet_year)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
 r.squaredGLMM(fit_lt_pep_off_vs_gppnet_year)
 plot(allEffects(fit_lt_pep_off_vs_gppnet_year))
+tab_model(fit_lt_pep_off_vs_gppnet_year)
 
 aic_lt_pep_off_vs_gppnet_year <- AIC(fit_lt_pep_off_vs_gppnet_year)
 out_pep_off_vs_gppnet_year <- allEffects(fit_lt_pep_off_vs_gppnet_year)
@@ -449,7 +497,7 @@ out_anova <- anova(fit_iav_pep_off_vs_gppnet, fit_lt_pep_off_vs_gppnet_year)
 out_anova
 ```
 
-#### Long-term trend in Anet - Fig. 2F
+#### Anet P-model ~ Year
 
 ```{r}
 fit_lt_pep_gppnet_vs_year <- lmer(gpp_net ~ scale(year) + (1|id_site) + (1|species), data = df_zz_pmodel, na.action = "na.exclude")
@@ -467,13 +515,18 @@ gg_lt_pep_gppnet_vs_year
 
 ### Interannual variation (IAV)
 
-#### Start-of-Season (SOS) - Fig 3A
+#### EOS ~ SOS
 
 ```{r}
-fit_iav_modis_off_vs_on = lmer(off ~ scale(on) + (1|sitename) , data = df_modis, na.action = "na.exclude")
+fit_iav_modis_off_vs_on = lmer(off ~ scale(on) + (1|sitename), data = df_modis, na.action = "na.exclude")
 summary(fit_iav_modis_off_vs_on)
+out <- summary(fit_iav_modis_off_vs_on)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
 r.squaredGLMM(fit_iav_modis_off_vs_on)
 plot(allEffects(fit_iav_modis_off_vs_on))
+tab_model(fit_iav_modis_off_vs_on)
 
 aic_iav_modis_off_vs_on <- AIC(fit_iav_modis_off_vs_on)
 out_iav_modis_off_vs_on <- allEffects(fit_iav_modis_off_vs_on)
@@ -481,13 +534,18 @@ gg_iav_modis_off_vs_on <- ggplot_on(out_iav_modis_off_vs_on)
 gg_iav_modis_off_vs_on
 ```
 
-#### Anet MODIS P-model
+#### EOS ~ Anet P-model
 
 ```{r}
 fit_iav_modis_off_vs_gppnet = lmer(off ~ scale(gpp_net) + (1|sitename) , data = df_modis, na.action = "na.exclude")
 summary(fit_iav_modis_off_vs_gppnet)
+out <- summary(fit_iav_modis_off_vs_gppnet)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
 r.squaredGLMM(fit_iav_modis_off_vs_gppnet)
 plot(allEffects(fit_iav_modis_off_vs_gppnet))
+tab_model(fit_iav_modis_off_vs_gppnet)
 
 aic_iav_modis_off_vs_gppnet <- AIC(fit_iav_modis_off_vs_gppnet)
 out_iav_modis_off_vs_gppnet <- allEffects(fit_iav_modis_off_vs_gppnet)
@@ -497,7 +555,7 @@ gg_iav_modis_off_vs_gppnet
 
 ### Long-term (year)
 
-#### EOS - Fig 3B and 3C
+#### EOS ~ SOS + Year
 
 ```{r}
 fit_lt_modis_off_vs_on_year = lmer(off ~ scale(on) + scale(year) + (1|sitename), data = df_modis, na.action = "na.exclude")
@@ -514,7 +572,7 @@ gg_lt_modis_off_vs_year1 <- ggplot_year(out_lt_modis_off_vs_on_year)
 gg_lt_modis_off_vs_on + gg_lt_modis_off_vs_year1
 ```
 
-#### EOS - Fig 3D
+#### SOS ~ Year
 
 ```{r}
 fit_lt_modis_on_vs_year <- lmer(on ~ scale(year) + (1|sitename), data = df_modis, na.action = "na.exclude")
@@ -528,7 +586,7 @@ gg_lt_modis_on_vs_year <- gg_lt_modis_on_vs_year + ylab("SOS (DOY)")
 gg_lt_modis_on_vs_year
 ```
 
-#### Anet P-model
+#### EOS ~ Anet + Year
 
 ```{r}
 fit_lt_modis_off_vs_gppnet_year = lmer(off ~ scale(gpp_net) + scale(year) + (1|sitename), data = df_modis, na.action = "na.exclude")
@@ -552,7 +610,7 @@ out_anova <- anova(fit_iav_modis_off_vs_gppnet, fit_lt_modis_off_vs_gppnet_year)
 out_anova
 ```
 
-#### Long-term trend in Anet -  
+#### Anet ~ Year-  
 
 ```{r}
 fit_lt_modis_gppnet_vs_year <- lmer(gpp_net ~ scale(year) + (1|sitename), data = df_modis, na.action = "na.exclude")
@@ -569,7 +627,7 @@ gg_lt_modis_gppnet_vs_year
 
 This is based on a spatially stratified sampling.
 
-#### Anet MODIS P-model - Figure 2A and 2B
+#### EOS ~ Mean Anet + Anomalies Anet
 
 Separate mean across years 2001-2018 from interannual anomaly.
 
@@ -592,8 +650,13 @@ df_modis <- df_modis %>%
 
 fit_modis_anom_gppnet = lmer(off ~ scale(mean_gpp_net) + scale(anom_gpp_net) + (1|sitename) + (1|year), data = df_modis, na.action = "na.exclude")
 summary(fit_modis_anom_gppnet)
+out <- summary(fit_modis_anom_gppnet)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
 plot(allEffects(fit_modis_anom_gppnet))
 r.squaredGLMM(fit_modis_anom_gppnet)
+tab_model(fit_modis_anom_gppnet)
 
 aic_modis_anom_gppnet <- AIC(fit_modis_anom_gppnet)
 out_modis_anom_gppnet <- allEffects(fit_modis_anom_gppnet)
@@ -604,7 +667,7 @@ gg_modis_mean_gppnet + gg_modis_anom_gppnet
 
 ```
 
-#### SOS 
+#### EOS ~ Mean SOS + Anomalies SOS
 
 Separate mean across years 2001-2018 from interannual anomaly.
 
@@ -627,8 +690,13 @@ df_modis <- df_modis %>%
 
 fit_lt_modis_anom_on = lmer(off ~ scale(mean_on) + scale(anom_on) + (1|sitename) + (1|year), data = df_modis, na.action = "na.exclude")
 summary(fit_lt_modis_anom_on)
+out <- summary(fit_lt_modis_anom_on)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
 plot(allEffects(fit_lt_modis_anom_on))
 r.squaredGLMM(fit_lt_modis_anom_on)
+tab_model(fit_lt_modis_anom_on)
 
 aic_lt_modis_anom_on <- AIC(fit_lt_modis_anom_on)
 out_lt_modis_anom_on <- allEffects(fit_lt_modis_anom_on)
@@ -643,24 +711,28 @@ gg_lt_modis_mean_on + gg_lt_modis_anom_on
 
 ```{r}
 ff_lt_pep_off_vs_year2 <- gg_lt_pep_off_vs_year2 +
-  labs(title = expression(paste("EOS ~ ", bold("Year"), " + ", italic("A")[net])), subtitle = "PEP data and LPJ-GUESS") + 
+  labs(title = expression(paste("EOS ~ ", bold("Year"), " + ", italic("A")[net])), 
+       subtitle = "PEP data and LPJ-GUESS") +
+       #caption = expression(paste("2.525e"^"-1", " ± -2.173e"^"-3"))) +
   scale_y_continuous( limits = c(270,294),breaks = seq(270,290,10)) + 
   scale_x_continuous(limits = c(1950,2021), breaks = seq(1960,2020,20))
 
 ff_lt_pep_off_vs_cAtot <- gg_lt_pep_off_vs_cAtot +
-  labs(title = expression(paste("EOS ~ Year + ", bolditalic("A")[bold(net)])), subtitle = "PEP data and LPJ-GUESS") + 
+  labs(title = expression(paste("EOS ~ Year + ", bolditalic("A")[bold(net)])), 
+       subtitle = "PEP data and LPJ-GUESS") +
   scale_y_continuous( limits = c(210,365),breaks = seq(240,360,40)) + 
   scale_x_continuous(limits = c(350,2400), breaks = seq(500,2400,500))
 
 ff_iav_pep_off_vs_cAtot <- gg_iav_pep_off_vs_cAtot +
-  labs(title = expression(paste("EOS ~ ", italic("A")[net])), subtitle = "PEP data and LPJ-GUESS") +
+  labs(title = expression(paste("EOS ~ ", italic("A")[net])), 
+       subtitle = "PEP data and LPJ-GUESS") +
   theme(plot.background = element_rect(fill = "grey")) + 
   scale_y_continuous( limits = c(210,365),breaks = seq(240,360,40)) + 
   scale_x_continuous(limits = c(350,2400), breaks = seq(500,2400,500))
 
 pp1 <- ff_lt_pep_off_vs_year2 + ff_lt_pep_off_vs_cAtot + ff_iav_pep_off_vs_cAtot
 pp1 + plot_annotation(tag_levels = 'A')
-ggsave("~/pep/manuscript/fig_1.png", width = 8, height = 3, dpi=300)
+ggsave("~/pep/manuscript/fig_1e.png", width = 8, height = 3, dpi=300)
 ```
 
 ## Figure 2
@@ -722,8 +794,8 @@ map_gpp <- ggplot(data = world) +
         panel.background = element_rect(fill = "aliceblue"),axis.title=element_blank(),plot.title = element_text(size = 10))
 
 pp2 <- (ff_modis_mean_gppnet + ff_modis_anom_gppnet)/ map_eos / map_gpp
-pp2 + plot_annotation(tag_levels = 'A') + plot_layout(heights = c(1, 1.5, 1.5),widths = c(0.5, 1.5, 1.5))
-ggsave("~/pep/manuscript/fig_2.png", width = 7.5, height = 6.5, dpi=300)
+pp2 + plot_annotation(tag_levels = 'A') + plot_layout(heights = c(1.5, 1, 1),widths = c(2, 1, 1))
+ggsave("~/pep/manuscript/fig_2.png", width = 9, height = 8, dpi=300)
 
 ```
 
@@ -787,6 +859,7 @@ ff_iav_pep_off_vs_on <- gg_iav_pep_off_vs_on +
 ss3 <- ff_lt_pep_off_vs_year1 + ff_lt_pep_off_vs_on + ff_iav_pep_off_vs_on
 ss3 + plot_annotation(tag_levels = 'A')
 ggsave("~/pep/manuscript/fig_S3.png", width = 8, height = 3, dpi=300)
+
 ```
 
 ## Supplementary Fig. S4
