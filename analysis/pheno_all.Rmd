@@ -205,7 +205,6 @@ df_zz <- data.table::fread("~/data/pep/processed/DataMeta_3_Drivers_20_11_10.csv
   rename(lon = LON, lat = LAT, year = YEAR, off = DoY_off, on = DoY_out, 
          anom_off_zani = autumn_anomaly, anom_on_zani = spring_anomaly, 
          species = Species, id_site = PEP_ID, id_species_site = timeseries)
-min(pep725_pmodel$year)
 ```
 
 ### P-model outputs data
@@ -442,6 +441,116 @@ gg_lt_pep_cAtot_vs_year <- ggplot_year(out_lt_pep_cAtot_vs_year)
 gg_lt_pep_cAtot_vs_year <- gg_lt_pep_cAtot_vs_year + 
   labs(y = expression(italic("A")[net]))
 gg_lt_pep_cAtot_vs_year
+```
+
+
+#### EOS ~ Anet LPJ + meanAnet LPJ
+
+Instead of Year, look at the rolling year Anet. Expectation: positive relationship with mean-Anet, but negative with (interannual) Anet. Used for response to Constantin in Email.
+
+```{r}
+library(RcppRoll)
+
+df_zzz <- df_zz %>% 
+  group_by(id_site, species) %>% 
+  nest() %>% 
+  ungroup() %>% 
+  mutate(data = purrr::map(data, ~mutate(., cA_tot_mean = roll_mean(cA_tot, n = 10, align = "right", fill = NA)))) %>% 
+  unnest(data)
+
+fit_lt_pep_off_vs_cAtot_meanAtot = lmer(off ~ scale(cA_tot) + scale(cA_tot_mean) + (1|id_site) + (1|species), data = df_zzz, na.action = "na.exclude")
+out <- summary(fit_lt_pep_off_vs_cAtot_meanAtot)
+print(out)
+# out$coefficients[,"Estimate"]
+# out$coefficient[,"Std. Error"]*1.96
+# upperCI1 <- out$coefficients["scale(cA_tot_anom)","Estimate"] + out$coefficient["scale(cA_tot_anom)","Std. Error"]*1.96
+# lowerCI1 <- out$coefficients["scale(cA_tot_anom)","Estimate"] - out$coefficient["scale(cA_tot_anom)","Std. Error"]*1.96
+# upperCI2 <- out$coefficients["scale(cA_tot_mean)","Estimate"] + out$coefficient["scale(cA_tot_mean)","Std. Error"]*1.96
+# lowerCI2 <- out$coefficients["scale(cA_tot_mean)","Estimate"] - out$coefficient["scale(cA_tot_mean)","Std. Error"]*1.96
+# r.squaredGLMM(fit_lt_pep_off_vs_cAtot_meanAtot)
+# plot(allEffects(fit_lt_pep_off_vs_cAtot_meanAtot))
+# tab_model(fit_lt_pep_off_vs_cAtot_meanAtot)
+# 
+# aic_lt_pep_off_vs_cAtot_meanAtot <- AIC(fit_lt_pep_off_vs_cAtot_meanAtot)
+# out_lt_pep_off_vs_cAtot_meanAtot <- allEffects(fit_lt_pep_off_vs_cAtot_meanAtot)
+# gg_lt_pep_off_vs_cAtot <- ggplot_cA_tot(out_lt_pep_off_vs_cAtot_meanAtot)
+# gg_lt_pep_off_vs_year2 <- ggplot_year(out_lt_pep_off_vs_cAtot_meanAtot)
+# 
+# gg_lt_pep_off_vs_cAtot + gg_lt_pep_off_vs_year2
+# 
+# # Unscaled
+# trend_unscaled <- out$coefficients["scale(cA_tot_mean)","Estimate"]/ sd(df_zz$year)
+# error_unscaled <- out$coefficients["scale(cA_tot_mean)","Std. Error"]/ sd(df_zz$year)
+# upperCI_unscaled <- out$coefficients["scale(cA_tot_mean)","Estimate"]/ sd(df_zz$year) + out$coefficient["scale(cA_tot_mean)","Std. Error"]/ sd(df_zz$year)*1.96
+# lowerCI_unscaled <- out$coefficients["scale(cA_tot_mean)","Estimate"]/ sd(df_zz$year) - out$coefficient["scale(cA_tot_mean)","Std. Error"]/ sd(df_zz$year)*1.96
+# 
+# # Bivariate model without scaling predictors
+# fit_lt_pep_off_vs_cAtot_meanAtotNS = lmer(off ~ cA_tot + cA_tot_mean + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
+# out_ns <- summary(fit_lt_pep_off_vs_cAtot_meanAtotNS)
+# print(out_ns)
+# upperCI1 <- out_ns$coefficients["cA_tot","Estimate"] + out_ns$coefficient["cA_tot","Std. Error"]*1.96
+# lowerCI1 <- out_ns$coefficients["cA_tot","Estimate"] - out_ns$coefficient["cA_tot","Std. Error"]*1.96
+# upperCI2 <- out_ns$coefficients["cA_tot_mean","Estimate"] + out_ns$coefficient["cA_tot_mean","Std. Error"]*1.96
+# lowerCI2 <- out_ns$coefficients["cA_tot_mean","Estimate"] - out_ns$coefficient["cA_tot_mean","Std. Error"]*1.96
+
+```
+
+
+## NSC
+
+Model NSC dynamics as a first-order decay process with turnover times $\tau = 1.5, 3, 5$. 
+Warning: this takes quite some time to compute.
+
+```{r}
+source("../R/calc_nsc.R")
+
+df_nsc <- df_zz %>% 
+  group_by(sitename) %>%  # non-sensical column name
+  nest() %>% 
+  ungroup() %>% 
+  mutate(data = purrr::map(data, ~mutate(., nsc_15 = calc_nsc(cA_tot, tau = 1.5))),
+         data = purrr::map(data, ~mutate(., nsc_30 = calc_nsc(cA_tot, tau = 3.0))),
+         data = purrr::map(data, ~mutate(., nsc_50 = calc_nsc(cA_tot, tau = 5.0)))) %>% 
+  unnest(data)
+```
+
+#### EOS ~ NSC + Year 
+
+```{r}
+fit_lt_pep_off_vs_nsc_50_year = lmer(off ~ scale(nsc_50) + scale(year) + (1|id_site) + (1|species), data = df_nsc, na.action = "na.exclude")
+out <- summary(fit_lt_pep_off_vs_nsc_50_year)
+print(out)
+out$coefficients[,"Estimate"]
+out$coefficient[,"Std. Error"]*1.96
+upperCI1 <- out$coefficients["scale(nsc_50)","Estimate"] + out$coefficient["scale(nsc_50)","Std. Error"]*1.96
+lowerCI1 <- out$coefficients["scale(nsc_50)","Estimate"] - out$coefficient["scale(nsc_50)","Std. Error"]*1.96
+upperCI2 <- out$coefficients["scale(year)","Estimate"] + out$coefficient["scale(year)","Std. Error"]*1.96
+lowerCI2 <- out$coefficients["scale(year)","Estimate"] - out$coefficient["scale(year)","Std. Error"]*1.96
+r.squaredGLMM(fit_lt_pep_off_vs_nsc_50_year)
+plot(allEffects(fit_lt_pep_off_vs_nsc_50_year))
+tab_model(fit_lt_pep_off_vs_nsc_50_year)
+
+aic_lt_pep_off_vs_nsc_50_year <- AIC(fit_lt_pep_off_vs_nsc_50_year)
+out_lt_pep_off_vs_nsc_50_year <- allEffects(fit_lt_pep_off_vs_nsc_50_year)
+gg_lt_pep_off_vs_nsc_50 <- ggplot_nsc_50(out_lt_pep_off_vs_nsc_50_year)
+gg_lt_pep_off_vs_year2 <- ggplot_year(out_lt_pep_off_vs_nsc_50_year)
+
+gg_lt_pep_off_vs_nsc_50 + gg_lt_pep_off_vs_year2
+
+# Unscaled
+trend_unscaled <- out$coefficients["scale(year)","Estimate"]/ sd(df_zz$year)
+error_unscaled <- out$coefficients["scale(year)","Std. Error"]/ sd(df_zz$year)
+upperCI_unscaled <- out$coefficients["scale(year)","Estimate"]/ sd(df_zz$year) + out$coefficient["scale(year)","Std. Error"]/ sd(df_zz$year)*1.96
+lowerCI_unscaled <- out$coefficients["scale(year)","Estimate"]/ sd(df_zz$year) - out$coefficient["scale(year)","Std. Error"]/ sd(df_zz$year)*1.96
+
+# Bivariate model without scaling predictors
+fit_lt_pep_off_vs_nsc_50_yearNS = lmer(off ~ nsc_50 + year + (1|id_site) + (1|species), data = df_zz, na.action = "na.exclude")
+out_ns <- summary(fit_lt_pep_off_vs_nsc_50_yearNS)
+print(out_ns)
+upperCI1 <- out_ns$coefficients["nsc_50","Estimate"] + out_ns$coefficient["nsc_50","Std. Error"]*1.96
+lowerCI1 <- out_ns$coefficients["nsc_50","Estimate"] - out_ns$coefficient["nsc_50","Std. Error"]*1.96
+upperCI2 <- out_ns$coefficients["year","Estimate"] + out_ns$coefficient["year","Std. Error"]*1.96
+lowerCI2 <- out_ns$coefficients["year","Estimate"] - out_ns$coefficient["year","Std. Error"]*1.96
 ```
 
 ## P-model data
